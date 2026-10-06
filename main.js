@@ -6,7 +6,7 @@ import {
 
 
 // ==========================================================
-// PORPHYRA — INTERACTIVE CLOTH
+// PORPHYRA — INTERACTIVE SPRING CLOTH
 // ==========================================================
 
 
@@ -17,16 +17,22 @@ import {
 const RUG_WIDTH = 9.4;
 const RUG_HEIGHT = 5.3;
 
-// Cloth simulation resolution.
+
+// Physics grid.
 //
-// This is intentionally lower than the old visual mesh.
-// ~1,900 vertices is plenty for smooth interactive folds
-// while staying fast in a browser.
-const SEGMENTS_X = 56;
-const SEGMENTS_Y = 32;
+// 64 × 36 segments = 2,405 moving vertices.
+// Plenty for smooth cloth while remaining fast.
+const SEGMENTS_X = 64;
+const SEGMENTS_Y = 36;
+
+const COLS = SEGMENTS_X + 1;
+const ROWS = SEGMENTS_Y + 1;
 
 
-// Texture scale
+// ----------------------------------------------------------
+// TEXTURE SCALE
+// ----------------------------------------------------------
+
 const REPEAT_Y = 1.6;
 
 const REPEAT_X =
@@ -35,34 +41,44 @@ const REPEAT_X =
 
 
 // ----------------------------------------------------------
-// PHYSICS SETTINGS
+// CLOTH PHYSICS
 // ----------------------------------------------------------
 
-// How much motion survives each frame.
-const DAMPING = 0.965;
+// Neighbor-to-neighbor spring force.
+//
+// Higher = tighter fabric / faster ripples.
+const TENSION = 0.26;
 
-// Gently pulls the fabric back toward its original shape.
-const RETURN_FORCE = 0.0045;
 
-// Number of constraint passes each frame.
-const CONSTRAINT_ITERATIONS = 4;
+// Pulls fabric back toward its resting shape.
+const RESTORE_FORCE = 0.035;
 
-// Radius of cursor influence in rug-space.
-const CURSOR_RADIUS = 0.72;
 
-// Maximum bulge toward the viewer.
-const CURSOR_DEPTH = 0.42;
+// Velocity retained each 60-FPS-equivalent step.
+//
+// Lower = settles faster.
+// Higher = more silky wobble.
+const DAMPING = 0.935;
 
-// Stronger values = firmer fabric.
-const STRUCTURAL_STIFFNESS = 0.72;
-const SHEAR_STIFFNESS = 0.42;
+
+// Mouse influence radius in rug units.
+const POINTER_RADIUS = 0.80;
+
+
+// Maximum height toward camera.
+const POINTER_BULGE = 0.52;
+
+
+// How firmly the mouse attracts nearby fabric.
+const POINTER_STRENGTH = 0.15;
 
 
 // ----------------------------------------------------------
 // SCENE
 // ----------------------------------------------------------
 
-const scene = new THREE.Scene();
+const scene =
+    new THREE.Scene();
 
 scene.background =
     new THREE.Color(0x000000);
@@ -92,6 +108,7 @@ const renderer =
         powerPreference: 'high-performance'
     });
 
+
 renderer.setPixelRatio(
     Math.min(
         window.devicePixelRatio,
@@ -99,26 +116,23 @@ renderer.setPixelRatio(
     )
 );
 
+
 renderer.setSize(
     window.innerWidth,
     window.innerHeight
 );
 
+
 renderer.outputColorSpace =
     THREE.SRGBColorSpace;
+
 
 renderer.toneMapping =
     THREE.ACESFilmicToneMapping;
 
-// Keep the original material from getting washed out.
-renderer.toneMappingExposure = 0.72;
 
-
-// Shadows help make moving folds easier to read.
-renderer.shadowMap.enabled = true;
-
-renderer.shadowMap.type =
-    THREE.PCFSoftShadowMap;
+renderer.toneMappingExposure =
+    0.76;
 
 
 document.body.appendChild(
@@ -127,14 +141,18 @@ document.body.appendChild(
 
 
 // ----------------------------------------------------------
-// ENVIRONMENT
+// ENVIRONMENT LIGHTING
 // ----------------------------------------------------------
 
 const pmrem =
-    new THREE.PMREMGenerator(renderer);
+    new THREE.PMREMGenerator(
+        renderer
+    );
+
 
 const room =
     new RoomEnvironment();
+
 
 const environment =
     pmrem.fromScene(
@@ -142,59 +160,45 @@ const environment =
         0.04
     );
 
+
 scene.environment =
     environment.texture;
+
 
 room.dispose();
 pmrem.dispose();
 
 
 // ----------------------------------------------------------
-// LIGHTING
+// LIGHTS
 // ----------------------------------------------------------
 
-// Strong grazing-angle warm light.
-//
-// This is deliberately off to one side because grazing
-// light reveals cloth folds much better than frontal light.
+// Strong side light so folds are very obvious.
 const keyLight =
     new THREE.DirectionalLight(
         0xffdfbd,
-        3.2
+        3.0
     );
 
 keyLight.position.set(
-    -6,
+    -5,
     4,
-    5
+    6
 );
-
-keyLight.castShadow = true;
-
-keyLight.shadow.mapSize.set(
-    2048,
-    2048
-);
-
-keyLight.shadow.bias =
-    -0.00015;
-
-keyLight.shadow.normalBias =
-    0.025;
 
 scene.add(keyLight);
 
 
-// Soft cool fill.
+// Soft opposite fill.
 const fillLight =
     new THREE.DirectionalLight(
-        0xcad7ff,
-        0.55
+        0xcbd8ff,
+        0.5
     );
 
 fillLight.position.set(
     5,
-    -4,
+    -3,
     4
 );
 
@@ -218,7 +222,7 @@ async function loadTexture(path) {
 }
 
 
-function setupTexture(texture) {
+function configureTexture(texture) {
 
     texture.wrapS =
         THREE.RepeatWrapping;
@@ -226,20 +230,24 @@ function setupTexture(texture) {
     texture.wrapT =
         THREE.RepeatWrapping;
 
+
     texture.repeat.set(
         REPEAT_X,
         REPEAT_Y
     );
 
+
     texture.anisotropy =
         renderer.capabilities
             .getMaxAnisotropy();
+
 
     texture.minFilter =
         THREE.LinearMipmapLinearFilter;
 
     texture.magFilter =
         THREE.LinearFilter;
+
 
     texture.generateMipmaps =
         true;
@@ -251,286 +259,119 @@ function setupTexture(texture) {
 
 
 // ----------------------------------------------------------
-// CLOTH DATA
+// CLOTH VARIABLES
 // ----------------------------------------------------------
 
 let rug;
 let geometry;
-let positionAttribute;
+let positions;
 
-let current;
-let previous;
-let rest;
 
-let pinned;
+// Dynamic Z displacement.
+let height;
 
-const constraints = [];
+
+// Vertical velocity.
+let velocity;
+
+
+// Temporary acceleration buffer.
+let acceleration;
+
+
+// Original X/Y coordinates.
+//
+// Keeping these separate means the fabric can never
+// permanently stretch sideways or drift away.
+let restX;
+let restY;
+
+
+// Very subtle permanent resting shape.
+let restZ;
 
 
 // ----------------------------------------------------------
-// INDEX HELPER
+// INDEX
 // ----------------------------------------------------------
 
-function vertexIndex(x, y) {
+function indexOf(x, y) {
 
     return (
-        y * (SEGMENTS_X + 1)
-        + x
+        y * COLS +
+        x
     );
 
 }
 
 
 // ----------------------------------------------------------
-// ADD CONSTRAINT
+// CREATE SUBTLE RESTING FABRIC SHAPE
 // ----------------------------------------------------------
 
-function addConstraint(
-    a,
-    b,
-    restLength,
-    stiffness
-) {
+function restingHeight(x, y) {
 
-    constraints.push({
-        a,
-        b,
-        restLength,
-        stiffness
-    });
+    const wave1 =
+        Math.sin(
+            x * 1.15 +
+            y * 0.40
+        ) * 0.025;
+
+
+    const wave2 =
+        Math.sin(
+            x * 2.5 -
+            y * 1.25
+        ) * 0.012;
+
+
+    const wave3 =
+        Math.sin(
+            y * 3.4 +
+            x * 0.7
+        ) * 0.006;
+
+
+    return (
+        wave1 +
+        wave2 +
+        wave3
+    );
 
 }
 
 
 // ----------------------------------------------------------
-// BUILD CLOTH PHYSICS
+// INITIALIZE CLOTH ARRAYS
 // ----------------------------------------------------------
 
-function buildPhysics() {
+function initializeClothPhysics() {
 
-    positionAttribute =
+    positions =
         geometry.attributes.position;
 
-    const count =
-        positionAttribute.count;
-
-
-    current =
-        new Float32Array(
-            count * 3
-        );
-
-    previous =
-        new Float32Array(
-            count * 3
-        );
-
-    rest =
-        new Float32Array(
-            count * 3
-        );
-
-    pinned =
-        new Uint8Array(count);
-
-
-    // Copy original plane positions.
-    for (
-        let i = 0;
-        i < count;
-        i++
-    ) {
-
-        const i3 =
-            i * 3;
-
-        const x =
-            positionAttribute.getX(i);
-
-        const y =
-            positionAttribute.getY(i);
-
-        const z =
-            positionAttribute.getZ(i);
-
-
-        current[i3] = x;
-        current[i3 + 1] = y;
-        current[i3 + 2] = z;
-
-        previous[i3] = x;
-        previous[i3 + 1] = y;
-        previous[i3 + 2] = z;
-
-        rest[i3] = x;
-        rest[i3 + 1] = y;
-        rest[i3 + 2] = z;
-
-    }
-
-
-    const dx =
-        RUG_WIDTH /
-        SEGMENTS_X;
-
-    const dy =
-        RUG_HEIGHT /
-        SEGMENTS_Y;
-
-    const diagonal =
-        Math.sqrt(
-            dx * dx +
-            dy * dy
-        );
-
-
-    // ------------------------------------------------------
-    // PIN OUTER BORDER
-    //
-    // The page background stays stable while the interior
-    // behaves like stretched fabric.
-    // ------------------------------------------------------
-
-    for (
-        let y = 0;
-        y <= SEGMENTS_Y;
-        y++
-    ) {
-
-        for (
-            let x = 0;
-            x <= SEGMENTS_X;
-            x++
-        ) {
-
-            const i =
-                vertexIndex(x, y);
-
-
-            if (
-                x === 0 ||
-                x === SEGMENTS_X ||
-                y === 0 ||
-                y === SEGMENTS_Y
-            ) {
-
-                pinned[i] = 1;
-
-            }
-
-        }
-
-    }
-
-
-    // ------------------------------------------------------
-    // STRUCTURAL + SHEAR CONSTRAINTS
-    // ------------------------------------------------------
-
-    for (
-        let y = 0;
-        y <= SEGMENTS_Y;
-        y++
-    ) {
-
-        for (
-            let x = 0;
-            x <= SEGMENTS_X;
-            x++
-        ) {
-
-            const i =
-                vertexIndex(x, y);
-
-
-            // Horizontal
-            if (
-                x < SEGMENTS_X
-            ) {
-
-                addConstraint(
-                    i,
-                    vertexIndex(
-                        x + 1,
-                        y
-                    ),
-                    dx,
-                    STRUCTURAL_STIFFNESS
-                );
-
-            }
-
-
-            // Vertical
-            if (
-                y < SEGMENTS_Y
-            ) {
-
-                addConstraint(
-                    i,
-                    vertexIndex(
-                        x,
-                        y + 1
-                    ),
-                    dy,
-                    STRUCTURAL_STIFFNESS
-                );
-
-            }
-
-
-            // Diagonal /
-            if (
-                x < SEGMENTS_X &&
-                y < SEGMENTS_Y
-            ) {
-
-                addConstraint(
-                    i,
-                    vertexIndex(
-                        x + 1,
-                        y + 1
-                    ),
-                    diagonal,
-                    SHEAR_STIFFNESS
-                );
-
-            }
-
-
-            // Diagonal \
-            if (
-                x > 0 &&
-                y < SEGMENTS_Y
-            ) {
-
-                addConstraint(
-                    i,
-                    vertexIndex(
-                        x - 1,
-                        y + 1
-                    ),
-                    diagonal,
-                    SHEAR_STIFFNESS
-                );
-
-            }
-
-        }
-
-    }
-
-}
-
-
-// ----------------------------------------------------------
-// PHYSICS INTEGRATION
-// ----------------------------------------------------------
-
-function integratePhysics() {
 
     const count =
-        positionAttribute.count;
+        positions.count;
+
+
+    height =
+        new Float32Array(count);
+
+    velocity =
+        new Float32Array(count);
+
+    acceleration =
+        new Float32Array(count);
+
+    restX =
+        new Float32Array(count);
+
+    restY =
+        new Float32Array(count);
+
+    restZ =
+        new Float32Array(count);
 
 
     for (
@@ -539,230 +380,40 @@ function integratePhysics() {
         i++
     ) {
 
-        if (
-            pinned[i]
-        ) {
-            continue;
-        }
-
-
-        const i3 =
-            i * 3;
-
-
         const x =
-            current[i3];
+            positions.getX(i);
 
         const y =
-            current[i3 + 1];
+            positions.getY(i);
+
+
+        restX[i] = x;
+        restY[i] = y;
+
 
         const z =
-            current[i3 + 2];
-
-
-        const vx =
-            (x - previous[i3]) *
-            DAMPING;
-
-        const vy =
-            (y - previous[i3 + 1]) *
-            DAMPING;
-
-        const vz =
-            (z - previous[i3 + 2]) *
-            DAMPING;
-
-
-        previous[i3] = x;
-        previous[i3 + 1] = y;
-        previous[i3 + 2] = z;
-
-
-        // Verlet movement
-        current[i3] += vx;
-
-        current[i3 + 1] += vy;
-
-        current[i3 + 2] += vz;
-
-
-        // Gently restore the sheet to its original position.
-        current[i3] +=
-            (
-                rest[i3] -
-                current[i3]
-            ) *
-            RETURN_FORCE;
-
-        current[i3 + 1] +=
-            (
-                rest[i3 + 1] -
-                current[i3 + 1]
-            ) *
-            RETURN_FORCE;
-
-        current[i3 + 2] +=
-            (
-                rest[i3 + 2] -
-                current[i3 + 2]
-            ) *
-            RETURN_FORCE;
-
-    }
-
-}
-
-
-// ----------------------------------------------------------
-// SOLVE ONE CONSTRAINT
-// ----------------------------------------------------------
-
-function solveConstraint(
-    constraint
-) {
-
-    const a =
-        constraint.a;
-
-    const b =
-        constraint.b;
-
-
-    const a3 =
-        a * 3;
-
-    const b3 =
-        b * 3;
-
-
-    const dx =
-        current[b3] -
-        current[a3];
-
-    const dy =
-        current[b3 + 1] -
-        current[a3 + 1];
-
-    const dz =
-        current[b3 + 2] -
-        current[a3 + 2];
-
-
-    const distance =
-        Math.sqrt(
-            dx * dx +
-            dy * dy +
-            dz * dz
-        );
-
-
-    if (
-        distance < 0.000001
-    ) {
-        return;
-    }
-
-
-    const correction =
-        (
-            distance -
-            constraint.restLength
-        ) /
-        distance *
-        constraint.stiffness;
-
-
-    const cx =
-        dx * correction;
-
-    const cy =
-        dy * correction;
-
-    const cz =
-        dz * correction;
-
-
-    const aPinned =
-        pinned[a];
-
-    const bPinned =
-        pinned[b];
-
-
-    if (
-        !aPinned &&
-        !bPinned
-    ) {
-
-        current[a3] +=
-            cx * 0.5;
-
-        current[a3 + 1] +=
-            cy * 0.5;
-
-        current[a3 + 2] +=
-            cz * 0.5;
-
-
-        current[b3] -=
-            cx * 0.5;
-
-        current[b3 + 1] -=
-            cy * 0.5;
-
-        current[b3 + 2] -=
-            cz * 0.5;
-
-    }
-
-    else if (
-        !aPinned
-    ) {
-
-        current[a3] += cx;
-        current[a3 + 1] += cy;
-        current[a3 + 2] += cz;
-
-    }
-
-    else if (
-        !bPinned
-    ) {
-
-        current[b3] -= cx;
-        current[b3 + 1] -= cy;
-        current[b3 + 2] -= cz;
-
-    }
-
-}
-
-
-// ----------------------------------------------------------
-// APPLY ALL CONSTRAINTS
-// ----------------------------------------------------------
-
-function solveConstraints() {
-
-    for (
-        let iteration = 0;
-        iteration <
-        CONSTRAINT_ITERATIONS;
-        iteration++
-    ) {
-
-        for (
-            const constraint
-            of constraints
-        ) {
-
-            solveConstraint(
-                constraint
+            restingHeight(
+                x,
+                y
             );
 
-        }
+
+        restZ[i] = z;
+
+
+        positions.setZ(
+            i,
+            z
+        );
 
     }
+
+
+    positions.needsUpdate =
+        true;
+
+
+    geometry.computeVertexNormals();
 
 }
 
@@ -771,274 +422,517 @@ function solveConstraints() {
 // POINTER
 // ----------------------------------------------------------
 
-const pointer =
+const pointerNDC =
     new THREE.Vector2();
+
 
 const raycaster =
     new THREE.Raycaster();
 
 
-let pointerActive =
-    false;
+// IMPORTANT:
+//
+// We intersect the mouse with this perfectly stationary
+// invisible mathematical plane.
+//
+// We do NOT raycast against the moving cloth itself.
+const interactionPlane =
+    new THREE.Plane(
+        new THREE.Vector3(
+            0,
+            0,
+            1
+        ),
+        0
+    );
 
-let pointerWorldX = 0;
-let pointerWorldY = 0;
+
+const intersection =
+    new THREE.Vector3();
+
+
+let pointerActive = false;
+
+let pointerX = 0;
+let pointerY = 0;
 
 let pointerSpeed = 0;
 
-let lastPointerX = 0;
-let lastPointerY = 0;
-let lastPointerTime =
+
+let previousPointerX = 0;
+let previousPointerY = 0;
+
+let previousPointerTime =
     performance.now();
+
+let hasPreviousPointer =
+    false;
 
 
 // ----------------------------------------------------------
 // POINTER MOVE
 // ----------------------------------------------------------
 
-function handlePointerMove(event) {
+function onPointerMove(event) {
 
     const rect =
         renderer.domElement
             .getBoundingClientRect();
 
 
-    const px =
-        event.clientX -
-        rect.left;
-
-    const py =
-        event.clientY -
-        rect.top;
-
-
-    pointer.x =
+    pointerNDC.x =
         (
-            px /
+            (
+                event.clientX -
+                rect.left
+            ) /
             rect.width
         ) * 2 - 1;
 
-    pointer.y =
+
+    pointerNDC.y =
         -(
-            py /
+            (
+                event.clientY -
+                rect.top
+            ) /
             rect.height
         ) * 2 + 1;
+
+
+    raycaster.setFromCamera(
+        pointerNDC,
+        camera
+    );
+
+
+    const hit =
+        raycaster.ray.intersectPlane(
+            interactionPlane,
+            intersection
+        );
+
+
+    if (!hit) {
+
+        pointerActive = false;
+
+        return;
+
+    }
+
+
+    // Is the mouse actually over the rug?
+    const inside =
+        Math.abs(
+            intersection.x
+        ) <= RUG_WIDTH / 2
+
+        &&
+
+        Math.abs(
+            intersection.y
+        ) <= RUG_HEIGHT / 2;
+
+
+    if (!inside) {
+
+        pointerActive = false;
+
+        return;
+
+    }
+
+
+    pointerX =
+        intersection.x;
+
+    pointerY =
+        intersection.y;
 
 
     const now =
         performance.now();
 
-    const dt =
-        Math.max(
-            1,
-            now - lastPointerTime
-        );
 
+    if (hasPreviousPointer) {
 
-    const dx =
-        event.clientX -
-        lastPointerX;
+        const dt =
+            Math.max(
+                (now -
+                previousPointerTime) /
+                1000,
 
-    const dy =
-        event.clientY -
-        lastPointerY;
-
-
-    pointerSpeed =
-        Math.sqrt(
-            dx * dx +
-            dy * dy
-        ) /
-        dt;
-
-
-    lastPointerX =
-        event.clientX;
-
-    lastPointerY =
-        event.clientY;
-
-    lastPointerTime =
-        now;
-
-
-    raycaster.setFromCamera(
-        pointer,
-        camera
-    );
-
-
-    const hits =
-        raycaster.intersectObject(
-            rug,
-            false
-        );
-
-
-    if (
-        hits.length > 0
-    ) {
-
-        const localPoint =
-            rug.worldToLocal(
-                hits[0]
-                    .point
-                    .clone()
+                0.001
             );
 
 
-        pointerWorldX =
-            localPoint.x;
+        const dx =
+            pointerX -
+            previousPointerX;
 
-        pointerWorldY =
-            localPoint.y;
+        const dy =
+            pointerY -
+            previousPointerY;
 
-        pointerActive =
-            true;
+
+        pointerSpeed =
+            Math.sqrt(
+                dx * dx +
+                dy * dy
+            ) / dt;
+
+
+        pointerSpeed =
+            Math.min(
+                pointerSpeed,
+                12
+            );
 
     }
 
-    else {
 
-        pointerActive =
-            false;
+    previousPointerX =
+        pointerX;
 
-    }
+    previousPointerY =
+        pointerY;
+
+
+    previousPointerTime =
+        now;
+
+
+    hasPreviousPointer =
+        true;
+
+
+    pointerActive =
+        true;
 
 }
 
 
-renderer.domElement
-    .addEventListener(
-        'pointermove',
-        handlePointerMove
-    );
+// ----------------------------------------------------------
+// POINTER LEAVE
+// ----------------------------------------------------------
+
+function onPointerLeave() {
+
+    pointerActive = false;
+
+    hasPreviousPointer = false;
+
+    pointerSpeed = 0;
+
+}
 
 
-renderer.domElement
-    .addEventListener(
-        'pointerleave',
-        () => {
+renderer.domElement.addEventListener(
+    'pointermove',
+    onPointerMove
+);
 
-            pointerActive =
-                false;
 
-        }
-    );
+renderer.domElement.addEventListener(
+    'pointerleave',
+    onPointerLeave
+);
 
 
 // ----------------------------------------------------------
-// POINTER → CLOTH FORCE
+// CLOTH SIMULATION
 // ----------------------------------------------------------
 
-function applyPointerForce() {
+function simulateCloth(deltaTime) {
 
-    if (
-        !pointerActive
-    ) {
-        return;
-    }
-
-
-    // Faster mouse movement produces a little more energy.
-    const speedBoost =
+    // Normalize physics approximately around 60 FPS.
+    const step =
         Math.min(
-            pointerSpeed * 0.45,
-            0.22
+            deltaTime * 60,
+            1.5
         );
 
 
-    const depth =
-        CURSOR_DEPTH +
-        speedBoost;
+    acceleration.fill(0);
 
 
-    const radiusSquared =
-        CURSOR_RADIUS *
-        CURSOR_RADIUS;
+    // ------------------------------------------------------
+    // SPRING COUPLING
+    //
+    // Each vertex wants to follow its four neighbors.
+    //
+    // This is what allows waves/folds to travel outward.
+    // ------------------------------------------------------
+
+    for (
+        let y = 1;
+        y < ROWS - 1;
+        y++
+    ) {
+
+        for (
+            let x = 1;
+            x < COLS - 1;
+            x++
+        ) {
+
+            const i =
+                indexOf(x, y);
 
 
-    const count =
-        positionAttribute.count;
+            const left =
+                indexOf(
+                    x - 1,
+                    y
+                );
+
+            const right =
+                indexOf(
+                    x + 1,
+                    y
+                );
+
+            const down =
+                indexOf(
+                    x,
+                    y - 1
+                );
+
+            const up =
+                indexOf(
+                    x,
+                    y + 1
+                );
+
+
+            const neighborAverage =
+                (
+                    height[left] +
+                    height[right] +
+                    height[down] +
+                    height[up]
+                ) * 0.25;
+
+
+            // Neighbor spring force.
+            acceleration[i] +=
+                (
+                    neighborAverage -
+                    height[i]
+                ) *
+                TENSION;
+
+
+            // Return to rest.
+            acceleration[i] +=
+                -height[i] *
+                RESTORE_FORCE;
+
+        }
+
+    }
+
+
+    // ------------------------------------------------------
+    // MOUSE FORCE
+    // ------------------------------------------------------
+
+    if (pointerActive) {
+
+        const radiusSquared =
+            POINTER_RADIUS *
+            POINTER_RADIUS;
+
+
+        // Faster mouse = stronger bulge / wave.
+        const speedBoost =
+            Math.min(
+                pointerSpeed * 0.020,
+                0.28
+            );
+
+
+        const bulge =
+            POINTER_BULGE +
+            speedBoost;
+
+
+        for (
+            let y = 1;
+            y < ROWS - 1;
+            y++
+        ) {
+
+            for (
+                let x = 1;
+                x < COLS - 1;
+                x++
+            ) {
+
+                const i =
+                    indexOf(x, y);
+
+
+                const dx =
+                    restX[i] -
+                    pointerX;
+
+                const dy =
+                    restY[i] -
+                    pointerY;
+
+
+                const distanceSquared =
+                    dx * dx +
+                    dy * dy;
+
+
+                if (
+                    distanceSquared <
+                    radiusSquared
+                ) {
+
+                    const distance =
+                        Math.sqrt(
+                            distanceSquared
+                        );
+
+
+                    let influence =
+                        1 -
+                        (
+                            distance /
+                            POINTER_RADIUS
+                        );
+
+
+                    // Smoothstep-shaped falloff.
+                    influence =
+                        influence *
+                        influence *
+                        (
+                            3 -
+                            2 * influence
+                        );
+
+
+                    const targetHeight =
+                        bulge *
+                        influence;
+
+
+                    acceleration[i] +=
+                        (
+                            targetHeight -
+                            height[i]
+                        ) *
+                        POINTER_STRENGTH;
+
+                }
+
+            }
+
+        }
+
+    }
+
+
+    // ------------------------------------------------------
+    // INTEGRATION
+    // ------------------------------------------------------
+
+    const frameDamping =
+        Math.pow(
+            DAMPING,
+            step
+        );
 
 
     for (
-        let i = 0;
-        i < count;
-        i++
+        let y = 1;
+        y < ROWS - 1;
+        y++
     ) {
 
-        if (
-            pinned[i]
-        ) {
-            continue;
-        }
-
-
-        const i3 =
-            i * 3;
-
-
-        const dx =
-            current[i3] -
-            pointerWorldX;
-
-        const dy =
-            current[i3 + 1] -
-            pointerWorldY;
-
-
-        const distanceSquared =
-            dx * dx +
-            dy * dy;
-
-
-        if (
-            distanceSquared <
-            radiusSquared
+        for (
+            let x = 1;
+            x < COLS - 1;
+            x++
         ) {
 
-            const distance =
-                Math.sqrt(
-                    distanceSquared
-                );
+            const i =
+                indexOf(x, y);
 
 
-            const normalized =
-                1 -
-                (
-                    distance /
-                    CURSOR_RADIUS
-                );
+            velocity[i] +=
+                acceleration[i] *
+                step;
 
 
-            // Smooth radial falloff.
-            const falloff =
-                normalized *
-                normalized *
-                (
-                    3 -
-                    2 * normalized
-                );
+            velocity[i] *=
+                frameDamping;
 
 
-            const targetZ =
-                depth *
-                falloff;
-
-
-            // Pull the fabric toward the viewer.
-            //
-            // previous stays behind slightly, creating
-            // real inertial follow-through.
-            current[i3 + 2] +=
-                (
-                    targetZ -
-                    current[i3 + 2]
-                ) *
-                0.26;
+            height[i] +=
+                velocity[i] *
+                step;
 
         }
+
+    }
+
+
+    // ------------------------------------------------------
+    // PIN EDGES
+    // ------------------------------------------------------
+
+    for (
+        let x = 0;
+        x < COLS;
+        x++
+    ) {
+
+        const bottom =
+            indexOf(x, 0);
+
+        const top =
+            indexOf(
+                x,
+                ROWS - 1
+            );
+
+
+        height[bottom] = 0;
+        velocity[bottom] = 0;
+
+        height[top] = 0;
+        velocity[top] = 0;
+
+    }
+
+
+    for (
+        let y = 0;
+        y < ROWS;
+        y++
+    ) {
+
+        const left =
+            indexOf(0, y);
+
+        const right =
+            indexOf(
+                COLS - 1,
+                y
+            );
+
+
+        height[left] = 0;
+        velocity[left] = 0;
+
+        height[right] = 0;
+        velocity[right] = 0;
 
     }
 
@@ -1046,32 +940,32 @@ function applyPointerForce() {
 
 
 // ----------------------------------------------------------
-// COPY SIMULATION TO THREE.JS MESH
+// UPDATE THREE.JS GEOMETRY
 // ----------------------------------------------------------
 
 function updateGeometry() {
 
-    const array =
-        positionAttribute.array;
-
-
     for (
         let i = 0;
-        i < array.length;
+        i < positions.count;
         i++
     ) {
 
-        array[i] =
-            current[i];
+        positions.setZ(
+            i,
+            restZ[i] +
+            height[i]
+        );
 
     }
 
 
-    positionAttribute.needsUpdate =
+    positions.needsUpdate =
         true;
 
 
-    // Recalculate normals from the ACTUAL moving cloth.
+    // Critical:
+    // lighting now follows the dynamically moving fabric.
     geometry.computeVertexNormals();
 
 }
@@ -1102,12 +996,19 @@ async function createRug() {
     baseColor.colorSpace =
         THREE.SRGBColorSpace;
 
+
     normalMap.colorSpace =
         THREE.NoColorSpace;
 
 
-    setupTexture(baseColor);
-    setupTexture(normalMap);
+    configureTexture(
+        baseColor
+    );
+
+
+    configureTexture(
+        normalMap
+    );
 
 
     // ------------------------------------------------------
@@ -1118,7 +1019,6 @@ async function createRug() {
         new THREE.PlaneGeometry(
             RUG_WIDTH,
             RUG_HEIGHT,
-
             SEGMENTS_X,
             SEGMENTS_Y
         );
@@ -1139,12 +1039,10 @@ async function createRug() {
                 normalMap,
 
 
-            // Stronger than before so the thread structure
-            // catches more light.
             normalScale:
                 new THREE.Vector2(
-                    1.55,
-                    -1.55
+                    1.35,
+                    -1.35
                 ),
 
 
@@ -1153,33 +1051,36 @@ async function createRug() {
 
 
             roughness:
-                0.54,
+                0.56,
 
 
-            // Cloth/silk response
+            // Cloth sheen.
             sheen:
                 1,
 
+
             sheenColor:
                 new THREE.Color(
-                    0xc89d79
+                    0xc79e7c
                 ),
 
+
             sheenRoughness:
-                0.42,
+                0.46,
 
 
             specularIntensity:
                 0.48,
 
+
             specularColor:
                 new THREE.Color(
-                    0xffe7ca
+                    0xffe7cf
                 ),
 
 
             envMapIntensity:
-                0.72,
+                0.75,
 
 
             side:
@@ -1194,24 +1095,14 @@ async function createRug() {
         );
 
 
-    rug.castShadow =
-        true;
-
-    rug.receiveShadow =
-        true;
-
-
     scene.add(rug);
 
 
-    buildPhysics();
+    initializeClothPhysics();
 
 
     window.rug =
         rug;
-
-    window.rugMaterial =
-        material;
 
 }
 
@@ -1226,6 +1117,7 @@ function fitCamera() {
         window.innerWidth /
         window.innerHeight;
 
+
     camera.updateProjectionMatrix();
 
 
@@ -1237,13 +1129,17 @@ function fitCamera() {
 
     const distanceForHeight =
         (RUG_HEIGHT / 2) /
-        Math.tan(fov / 2);
+        Math.tan(
+            fov / 2
+        );
 
 
     const distanceForWidth =
         (RUG_WIDTH / 2) /
         (
-            Math.tan(fov / 2) *
+            Math.tan(
+                fov / 2
+            ) *
             camera.aspect
         );
 
@@ -1308,6 +1204,7 @@ const loading =
         'loading'
     );
 
+
 const errorBox =
     document.getElementById(
         'error'
@@ -1317,6 +1214,7 @@ const errorBox =
 try {
 
     fitCamera();
+
 
     await createRug();
 
@@ -1349,18 +1247,23 @@ try {
 // ANIMATION LOOP
 // ----------------------------------------------------------
 
+const clock =
+    new THREE.Clock();
+
+
 renderer.setAnimationLoop(
     () => {
 
-        if (
-            rug
-        ) {
+        const dt =
+            Math.min(
+                clock.getDelta(),
+                1 / 20
+            );
 
-            integratePhysics();
 
-            applyPointerForce();
+        if (rug) {
 
-            solveConstraints();
+            simulateCloth(dt);
 
             updateGeometry();
 
