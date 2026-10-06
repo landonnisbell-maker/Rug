@@ -6,7 +6,7 @@ import {
 
 
 // ==========================================================
-// PORPHYRA — INTERACTIVE SPRING CLOTH
+// PORPHYRA — SMOOTH INTERACTIVE SPRING CLOTH
 // ==========================================================
 
 
@@ -17,11 +17,6 @@ import {
 const RUG_WIDTH = 9.4;
 const RUG_HEIGHT = 5.3;
 
-
-// Physics grid.
-//
-// 64 × 36 segments = 2,405 moving vertices.
-// Plenty for smooth cloth while remaining fast.
 const SEGMENTS_X = 64;
 const SEGMENTS_Y = 36;
 
@@ -44,41 +39,65 @@ const REPEAT_X =
 // CLOTH PHYSICS
 // ----------------------------------------------------------
 
-// Neighbor-to-neighbor spring force.
-//
-// Higher = tighter fabric / faster ripples.
+// Overall fabric tension.
 const TENSION = 0.26;
 
-
-// Pulls fabric back toward its resting shape.
+// Pull toward resting position.
 const RESTORE_FORCE = 0.035;
 
-
-// Velocity retained each 60-FPS-equivalent step.
+// Overall motion damping.
 //
-// Lower = settles faster.
-// Higher = more silky wobble.
-const DAMPING = 0.935;
+// Slightly more damping than before,
+// but still enough bounce to feel like fabric.
+const DAMPING = 0.915;
 
 
-// Mouse influence radius in rug units.
+// ----------------------------------------------------------
+// CURSOR INTERACTION
+// ----------------------------------------------------------
+
 const POINTER_RADIUS = 0.80;
 
-
-// Maximum height toward camera.
 const POINTER_BULGE = 0.52;
 
+// How strongly fabric follows the cursor.
+const POINTER_STIFFNESS = 0.14;
 
-// How firmly the mouse attracts nearby fabric.
-const POINTER_STRENGTH = 0.15;
+// NEW:
+// Removes the repeated back-and-forth oscillation
+// directly underneath the mouse.
+const POINTER_DAMPING = 0.20;
+
+// NEW:
+// How quickly the invisible physics cursor catches
+// up with the real mouse.
+//
+// Higher = more immediate.
+// Lower = smoother / floatier.
+const POINTER_FOLLOW_SPEED = 22;
+
+
+// ----------------------------------------------------------
+// FIXED PHYSICS TIMESTEP
+//
+// This is a major stability improvement.
+//
+// Physics always runs at 120 updates/sec,
+// regardless of monitor refresh rate.
+// ----------------------------------------------------------
+
+const FIXED_TIMESTEP = 1 / 120;
+
+const MAX_SUBSTEPS = 5;
+
+let physicsAccumulator = 0;
 
 
 // ----------------------------------------------------------
 // SCENE
 // ----------------------------------------------------------
 
-const scene =
-    new THREE.Scene();
+const scene = new THREE.Scene();
 
 scene.background =
     new THREE.Color(0x000000);
@@ -145,9 +164,7 @@ document.body.appendChild(
 // ----------------------------------------------------------
 
 const pmrem =
-    new THREE.PMREMGenerator(
-        renderer
-    );
+    new THREE.PMREMGenerator(renderer);
 
 
 const room =
@@ -173,12 +190,12 @@ pmrem.dispose();
 // LIGHTS
 // ----------------------------------------------------------
 
-// Strong side light so folds are very obvious.
 const keyLight =
     new THREE.DirectionalLight(
         0xffdfbd,
         3.0
     );
+
 
 keyLight.position.set(
     -5,
@@ -186,21 +203,23 @@ keyLight.position.set(
     6
 );
 
+
 scene.add(keyLight);
 
 
-// Soft opposite fill.
 const fillLight =
     new THREE.DirectionalLight(
         0xcbd8ff,
         0.5
     );
 
+
 fillLight.position.set(
     5,
     -3,
     4
 );
+
 
 scene.add(fillLight);
 
@@ -266,33 +285,17 @@ let rug;
 let geometry;
 let positions;
 
-
-// Dynamic Z displacement.
 let height;
-
-
-// Vertical velocity.
 let velocity;
-
-
-// Temporary acceleration buffer.
 let acceleration;
 
-
-// Original X/Y coordinates.
-//
-// Keeping these separate means the fabric can never
-// permanently stretch sideways or drift away.
 let restX;
 let restY;
-
-
-// Very subtle permanent resting shape.
 let restZ;
 
 
 // ----------------------------------------------------------
-// INDEX
+// GRID INDEX
 // ----------------------------------------------------------
 
 function indexOf(x, y) {
@@ -306,7 +309,7 @@ function indexOf(x, y) {
 
 
 // ----------------------------------------------------------
-// CREATE SUBTLE RESTING FABRIC SHAPE
+// SUBTLE RESTING FABRIC SHAPE
 // ----------------------------------------------------------
 
 function restingHeight(x, y) {
@@ -342,7 +345,7 @@ function restingHeight(x, y) {
 
 
 // ----------------------------------------------------------
-// INITIALIZE CLOTH ARRAYS
+// INITIALIZE CLOTH
 // ----------------------------------------------------------
 
 function initializeClothPhysics() {
@@ -430,12 +433,6 @@ const raycaster =
     new THREE.Raycaster();
 
 
-// IMPORTANT:
-//
-// We intersect the mouse with this perfectly stationary
-// invisible mathematical plane.
-//
-// We do NOT raycast against the moving cloth itself.
 const interactionPlane =
     new THREE.Plane(
         new THREE.Vector3(
@@ -453,10 +450,20 @@ const intersection =
 
 let pointerActive = false;
 
-let pointerX = 0;
-let pointerY = 0;
 
-let pointerSpeed = 0;
+// Raw browser pointer position.
+let targetPointerX = 0;
+let targetPointerY = 0;
+
+
+// NEW:
+// Smoothed physics pointer.
+let smoothPointerX = 0;
+let smoothPointerY = 0;
+
+
+let targetPointerSpeed = 0;
+let smoothPointerSpeed = 0;
 
 
 let previousPointerX = 0;
@@ -466,6 +473,9 @@ let previousPointerTime =
     performance.now();
 
 let hasPreviousPointer =
+    false;
+
+let hasSmoothPointer =
     false;
 
 
@@ -522,17 +532,14 @@ function onPointerMove(event) {
     }
 
 
-    // Is the mouse actually over the rug?
     const inside =
-        Math.abs(
-            intersection.x
-        ) <= RUG_WIDTH / 2
+        Math.abs(intersection.x)
+            <= RUG_WIDTH / 2
 
         &&
 
-        Math.abs(
-            intersection.y
-        ) <= RUG_HEIGHT / 2;
+        Math.abs(intersection.y)
+            <= RUG_HEIGHT / 2;
 
 
     if (!inside) {
@@ -544,11 +551,27 @@ function onPointerMove(event) {
     }
 
 
-    pointerX =
+    targetPointerX =
         intersection.x;
 
-    pointerY =
+    targetPointerY =
         intersection.y;
+
+
+    // Initialize smoothing immediately when the cursor
+    // first enters so it doesn't fly in from (0, 0).
+    if (!hasSmoothPointer) {
+
+        smoothPointerX =
+            targetPointerX;
+
+        smoothPointerY =
+            targetPointerY;
+
+        hasSmoothPointer =
+            true;
+
+    }
 
 
     const now =
@@ -559,33 +582,34 @@ function onPointerMove(event) {
 
         const dt =
             Math.max(
-                (now -
-                previousPointerTime) /
-                1000,
+                (
+                    now -
+                    previousPointerTime
+                ) / 1000,
 
                 0.001
             );
 
 
         const dx =
-            pointerX -
+            targetPointerX -
             previousPointerX;
 
         const dy =
-            pointerY -
+            targetPointerY -
             previousPointerY;
 
 
-        pointerSpeed =
+        targetPointerSpeed =
             Math.sqrt(
                 dx * dx +
                 dy * dy
             ) / dt;
 
 
-        pointerSpeed =
+        targetPointerSpeed =
             Math.min(
-                pointerSpeed,
+                targetPointerSpeed,
                 12
             );
 
@@ -593,10 +617,10 @@ function onPointerMove(event) {
 
 
     previousPointerX =
-        pointerX;
+        targetPointerX;
 
     previousPointerY =
-        pointerY;
+        targetPointerY;
 
 
     previousPointerTime =
@@ -622,8 +646,10 @@ function onPointerLeave() {
     pointerActive = false;
 
     hasPreviousPointer = false;
+    hasSmoothPointer = false;
 
-    pointerSpeed = 0;
+    targetPointerSpeed = 0;
+    smoothPointerSpeed = 0;
 
 }
 
@@ -641,28 +667,80 @@ renderer.domElement.addEventListener(
 
 
 // ----------------------------------------------------------
-// CLOTH SIMULATION
+// SMOOTH POINTER
 // ----------------------------------------------------------
 
-function simulateCloth(deltaTime) {
+function updateSmoothPointer(dt) {
 
-    // Normalize physics approximately around 60 FPS.
-    const step =
-        Math.min(
-            deltaTime * 60,
-            1.5
+    if (!pointerActive) {
+        return;
+    }
+
+
+    // Frame-rate-independent exponential smoothing.
+    const follow =
+        1 -
+        Math.exp(
+            -POINTER_FOLLOW_SPEED *
+            dt
         );
+
+
+    smoothPointerX +=
+        (
+            targetPointerX -
+            smoothPointerX
+        ) *
+        follow;
+
+
+    smoothPointerY +=
+        (
+            targetPointerY -
+            smoothPointerY
+        ) *
+        follow;
+
+
+    // Speed is smoothed separately so tiny pointer-event
+    // fluctuations don't make the cloth pulse.
+    const speedFollow =
+        1 -
+        Math.exp(
+            -12 *
+            dt
+        );
+
+
+    smoothPointerSpeed +=
+        (
+            targetPointerSpeed -
+            smoothPointerSpeed
+        ) *
+        speedFollow;
+
+}
+
+
+// ----------------------------------------------------------
+// PHYSICS STEP
+// ----------------------------------------------------------
+
+function simulateCloth(dt) {
+
+    updateSmoothPointer(dt);
 
 
     acceleration.fill(0);
 
 
+    // Convert fixed timestep to our old 60-FPS scale.
+    const step =
+        dt * 60;
+
+
     // ------------------------------------------------------
-    // SPRING COUPLING
-    //
-    // Each vertex wants to follow its four neighbors.
-    //
-    // This is what allows waves/folds to travel outward.
+    // NEIGHBOR SPRINGS
     // ------------------------------------------------------
 
     for (
@@ -687,17 +765,20 @@ function simulateCloth(deltaTime) {
                     y
                 );
 
+
             const right =
                 indexOf(
                     x + 1,
                     y
                 );
 
+
             const down =
                 indexOf(
                     x,
                     y - 1
                 );
+
 
             const up =
                 indexOf(
@@ -715,7 +796,6 @@ function simulateCloth(deltaTime) {
                 ) * 0.25;
 
 
-            // Neighbor spring force.
             acceleration[i] +=
                 (
                     neighborAverage -
@@ -724,7 +804,6 @@ function simulateCloth(deltaTime) {
                 TENSION;
 
 
-            // Return to rest.
             acceleration[i] +=
                 -height[i] *
                 RESTORE_FORCE;
@@ -735,7 +814,7 @@ function simulateCloth(deltaTime) {
 
 
     // ------------------------------------------------------
-    // MOUSE FORCE
+    // POINTER FORCE
     // ------------------------------------------------------
 
     if (pointerActive) {
@@ -745,11 +824,11 @@ function simulateCloth(deltaTime) {
             POINTER_RADIUS;
 
 
-        // Faster mouse = stronger bulge / wave.
         const speedBoost =
             Math.min(
-                pointerSpeed * 0.020,
-                0.28
+                smoothPointerSpeed *
+                0.020,
+                0.24
             );
 
 
@@ -776,11 +855,12 @@ function simulateCloth(deltaTime) {
 
                 const dx =
                     restX[i] -
-                    pointerX;
+                    smoothPointerX;
+
 
                 const dy =
                     restY[i] -
-                    pointerY;
+                    smoothPointerY;
 
 
                 const distanceSquared =
@@ -807,7 +887,7 @@ function simulateCloth(deltaTime) {
                         );
 
 
-                    // Smoothstep-shaped falloff.
+                    // Smoothstep
                     influence =
                         influence *
                         influence *
@@ -822,12 +902,24 @@ function simulateCloth(deltaTime) {
                         influence;
 
 
+                    const error =
+                        targetHeight -
+                        height[i];
+
+
+                    // Spring toward cursor shape.
                     acceleration[i] +=
-                        (
-                            targetHeight -
-                            height[i]
-                        ) *
-                        POINTER_STRENGTH;
+                        error *
+                        POINTER_STIFFNESS;
+
+
+                    // NEW:
+                    // Local velocity damping prevents the
+                    // cursor area from repeatedly overshooting.
+                    acceleration[i] -=
+                        velocity[i] *
+                        POINTER_DAMPING *
+                        influence;
 
                 }
 
@@ -839,7 +931,7 @@ function simulateCloth(deltaTime) {
 
 
     // ------------------------------------------------------
-    // INTEGRATION
+    // INTEGRATE
     // ------------------------------------------------------
 
     const frameDamping =
@@ -896,6 +988,7 @@ function simulateCloth(deltaTime) {
         const bottom =
             indexOf(x, 0);
 
+
         const top =
             indexOf(
                 x,
@@ -905,6 +998,7 @@ function simulateCloth(deltaTime) {
 
         height[bottom] = 0;
         velocity[bottom] = 0;
+
 
         height[top] = 0;
         velocity[top] = 0;
@@ -921,6 +1015,7 @@ function simulateCloth(deltaTime) {
         const left =
             indexOf(0, y);
 
+
         const right =
             indexOf(
                 COLS - 1,
@@ -930,6 +1025,7 @@ function simulateCloth(deltaTime) {
 
         height[left] = 0;
         velocity[left] = 0;
+
 
         height[right] = 0;
         velocity[right] = 0;
@@ -964,8 +1060,6 @@ function updateGeometry() {
         true;
 
 
-    // Critical:
-    // lighting now follows the dynamically moving fabric.
     geometry.computeVertexNormals();
 
 }
@@ -1011,10 +1105,6 @@ async function createRug() {
     );
 
 
-    // ------------------------------------------------------
-    // GEOMETRY
-    // ------------------------------------------------------
-
     geometry =
         new THREE.PlaneGeometry(
             RUG_WIDTH,
@@ -1023,10 +1113,6 @@ async function createRug() {
             SEGMENTS_Y
         );
 
-
-    // ------------------------------------------------------
-    // MATERIAL
-    // ------------------------------------------------------
 
     const material =
         new THREE.MeshPhysicalMaterial({
@@ -1054,7 +1140,6 @@ async function createRug() {
                 0.56,
 
 
-            // Cloth sheen.
             sheen:
                 1,
 
@@ -1108,7 +1193,7 @@ async function createRug() {
 
 
 // ----------------------------------------------------------
-// CAMERA FIT
+// CAMERA
 // ----------------------------------------------------------
 
 function fitCamera() {
@@ -1244,7 +1329,7 @@ try {
 
 
 // ----------------------------------------------------------
-// ANIMATION LOOP
+// ANIMATION
 // ----------------------------------------------------------
 
 const clock =
@@ -1254,16 +1339,57 @@ const clock =
 renderer.setAnimationLoop(
     () => {
 
-        const dt =
+        const frameTime =
             Math.min(
                 clock.getDelta(),
-                1 / 20
+                0.05
             );
 
 
-        if (rug) {
+        physicsAccumulator +=
+            frameTime;
 
-            simulateCloth(dt);
+
+        let substeps = 0;
+
+
+        while (
+            physicsAccumulator >=
+                FIXED_TIMESTEP
+
+            &&
+
+            substeps <
+                MAX_SUBSTEPS
+        ) {
+
+            simulateCloth(
+                FIXED_TIMESTEP
+            );
+
+
+            physicsAccumulator -=
+                FIXED_TIMESTEP;
+
+
+            substeps++;
+
+        }
+
+
+        // Don't allow accumulated lag to explode
+        // after switching tabs, etc.
+        if (
+            substeps ===
+            MAX_SUBSTEPS
+        ) {
+
+            physicsAccumulator = 0;
+
+        }
+
+
+        if (rug) {
 
             updateGeometry();
 
