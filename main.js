@@ -6,45 +6,28 @@ import {
 
 
 // ==========================================================
-// PORPHYRA
-// Byzantine Rug — Material Baseline
+// PORPHYRA — STATIC CLOTH QUALITY TEST
 // ==========================================================
 
 
 // ----------------------------------------------------------
-// RUG SIZE
+// RUG SETTINGS
 // ----------------------------------------------------------
 
 const RUG_WIDTH = 9.4;
 const RUG_HEIGHT = 5.3;
 
-
-// ----------------------------------------------------------
-// TEXTURE SCALE
-//
-// This is the equivalent of "zooming out" the material.
-//
-// Higher = smaller pattern / more repetitions.
-//
-// Try:
-// 1.3 = larger pattern
-// 1.6 = current recommendation
-// 2.0 = smaller pattern
-// ----------------------------------------------------------
-
+// Texture scale
 const REPEAT_Y = 1.6;
-
 const REPEAT_X =
-    REPEAT_Y *
-    (RUG_WIDTH / RUG_HEIGHT);
+    REPEAT_Y * (RUG_WIDTH / RUG_HEIGHT);
 
 
 // ----------------------------------------------------------
 // SCENE
 // ----------------------------------------------------------
 
-const scene =
-    new THREE.Scene();
+const scene = new THREE.Scene();
 
 scene.background =
     new THREE.Color(0x000000);
@@ -56,9 +39,8 @@ scene.background =
 
 const camera =
     new THREE.PerspectiveCamera(
-        35,
-        window.innerWidth /
-        window.innerHeight,
+        32,
+        window.innerWidth / window.innerHeight,
         0.1,
         100
     );
@@ -71,19 +53,11 @@ const camera =
 const renderer =
     new THREE.WebGLRenderer({
         antialias: true,
-
-        powerPreference:
-            'high-performance'
+        powerPreference: 'high-performance'
     });
 
-
-// High-resolution rendering without going ridiculous
-// on extremely high-DPI displays.
 renderer.setPixelRatio(
-    Math.min(
-        window.devicePixelRatio,
-        2
-    )
+    Math.min(window.devicePixelRatio, 2)
 );
 
 renderer.setSize(
@@ -91,27 +65,14 @@ renderer.setSize(
     window.innerHeight
 );
 
-
-// Explicit color management.
 renderer.outputColorSpace =
     THREE.SRGBColorSpace;
 
-
-// Filmic Blender-like highlight handling.
 renderer.toneMapping =
     THREE.ACESFilmicToneMapping;
 
-
-// Adjust later if the material is too bright/dark.
-renderer.toneMappingExposure =
-    1.05;
-
-
-renderer.setClearColor(
-    0x000000,
-    1
-);
-
+// Less overexposed than before
+renderer.toneMappingExposure = 0.85;
 
 document.body.appendChild(
     renderer.domElement
@@ -120,147 +81,77 @@ document.body.appendChild(
 
 // ----------------------------------------------------------
 // ENVIRONMENT LIGHTING
-//
-// Very important.
-//
-// Blender Material Preview gets much of its beautiful
-// textile response from environment lighting.
-//
-// RoomEnvironment gives our rug studio-style reflections
-// WITHOUT showing an environment behind it.
 // ----------------------------------------------------------
 
 const pmrem =
-    new THREE.PMREMGenerator(
-        renderer
-    );
+    new THREE.PMREMGenerator(renderer);
 
-const room =
+const environmentScene =
     new RoomEnvironment();
 
-const environment =
+const environmentMap =
     pmrem.fromScene(
-        room,
+        environmentScene,
         0.04
     );
 
 scene.environment =
-    environment.texture;
+    environmentMap.texture;
 
-
-// Background remains black.
-scene.background =
-    new THREE.Color(
-        0x000000
-    );
-
-
-room.dispose();
+environmentScene.dispose();
 pmrem.dispose();
 
 
 // ----------------------------------------------------------
 // LIGHTING
+//
+// Raking lights help reveal tiny cloth folds.
 // ----------------------------------------------------------
 
-// Warm main light.
 const keyLight =
     new THREE.DirectionalLight(
-        0xffead1,
-        2.75
+        0xffe3c4,
+        1.8
     );
 
 keyLight.position.set(
-    -4,
-    4,
+    -5,
+    5,
     6
 );
 
-scene.add(
-    keyLight
-);
+scene.add(keyLight);
 
 
-// Cooler, softer opposite light.
 const fillLight =
     new THREE.DirectionalLight(
-        0xd7e0ff,
-        0.7
+        0xcdd7ff,
+        0.35
     );
 
 fillLight.position.set(
-    5,
-    -2,
-    4
-);
-
-scene.add(
-    fillLight
-);
-
-
-// Very soft frontal light.
-const frontLight =
-    new THREE.DirectionalLight(
-        0xffffff,
-        0.4
+        5,
+        -3,
+        4
     );
 
-frontLight.position.set(
-    0,
-    0,
-    6
-);
-
-scene.add(
-    frontLight
-);
+scene.add(fillLight);
 
 
 // ----------------------------------------------------------
-// TEXTURE LOADING
+// TEXTURES
 // ----------------------------------------------------------
 
-const textureLoader =
+const loader =
     new THREE.TextureLoader();
 
 
-async function loadTexture(
-    path,
-    name
-) {
-
-    try {
-
-        const texture =
-            await textureLoader.loadAsync(
-                path
-            );
-
-        console.log(
-            `${name} loaded`
-        );
-
-        return texture;
-
-    } catch (error) {
-
-        throw new Error(
-            `Could not load ${name}: ${path}`
-        );
-
-    }
-
+async function loadTexture(url) {
+    return await loader.loadAsync(url);
 }
 
 
-// ----------------------------------------------------------
-// COMMON TEXTURE SETTINGS
-// ----------------------------------------------------------
-
-function configureTexture(
-    texture
-) {
+function setupTexture(texture) {
 
     texture.wrapS =
         THREE.RepeatWrapping;
@@ -268,19 +159,14 @@ function configureTexture(
     texture.wrapT =
         THREE.RepeatWrapping;
 
-
     texture.repeat.set(
         REPEAT_X,
         REPEAT_Y
     );
 
-
-    // Makes angled/high-resolution textures
-    // look significantly sharper.
     texture.anisotropy =
         renderer.capabilities
             .getMaxAnisotropy();
-
 
     texture.minFilter =
         THREE.LinearMipmapLinearFilter;
@@ -288,14 +174,155 @@ function configureTexture(
     texture.magFilter =
         THREE.LinearFilter;
 
-
     texture.generateMipmaps =
         true;
 
-
     texture.needsUpdate =
         true;
+}
 
+
+// ----------------------------------------------------------
+// PROCEDURAL CLOTH SHAPE
+//
+// This is deliberately subtle.
+//
+// Later, the real cloth simulation will update these
+// vertices dynamically.
+// ----------------------------------------------------------
+
+function createClothGeometry() {
+
+    const geometry =
+        new THREE.PlaneGeometry(
+            RUG_WIDTH,
+            RUG_HEIGHT,
+
+            180,
+            100
+        );
+
+    const positions =
+        geometry.attributes.position;
+
+    for (
+        let i = 0;
+        i < positions.count;
+        i++
+    ) {
+
+        const x =
+            positions.getX(i);
+
+        const y =
+            positions.getY(i);
+
+
+        // Normalize coordinates roughly to -1 ... +1
+        const nx =
+            x / (RUG_WIDTH / 2);
+
+        const ny =
+            y / (RUG_HEIGHT / 2);
+
+
+        // --------------------------------------------------
+        // LARGE SOFT UNDULATION
+        // --------------------------------------------------
+
+        const wave1 =
+            Math.sin(
+                x * 1.15 +
+                y * 0.35
+            ) * 0.035;
+
+
+        // --------------------------------------------------
+        // SECONDARY CLOTH FOLD
+        // --------------------------------------------------
+
+        const wave2 =
+            Math.sin(
+                x * 2.7 -
+                y * 1.4
+            ) * 0.018;
+
+
+        // --------------------------------------------------
+        // VERY SMALL CROSS-FOLD
+        // --------------------------------------------------
+
+        const wave3 =
+            Math.sin(
+                y * 4.2 +
+                x * 0.8
+            ) * 0.009;
+
+
+        // --------------------------------------------------
+        // SLIGHT EDGE CURL
+        //
+        // Makes the rug stop reading as a mathematically
+        // perfect rectangle.
+        // --------------------------------------------------
+
+        const edgeX =
+            Math.pow(
+                Math.abs(nx),
+                7
+            ) * 0.045;
+
+        const edgeY =
+            Math.pow(
+                Math.abs(ny),
+                7
+            ) * 0.035;
+
+
+        // --------------------------------------------------
+        // CENTER SAG
+        // --------------------------------------------------
+
+        const centerDistance =
+            Math.sqrt(
+                nx * nx +
+                ny * ny
+            );
+
+        const sag =
+            -0.035 *
+            Math.max(
+                0,
+                1 - centerDistance
+            );
+
+
+        const z =
+            wave1 +
+            wave2 +
+            wave3 +
+            edgeX +
+            edgeY +
+            sag;
+
+
+        positions.setZ(
+            i,
+            z
+        );
+
+    }
+
+
+    // Because we physically moved the vertices,
+    // recalculate the real geometric normals.
+    geometry.computeVertexNormals();
+
+    positions.needsUpdate =
+        true;
+
+
+    return geometry;
 }
 
 
@@ -307,192 +334,108 @@ async function createRug() {
 
     const [
         baseColor,
-        packedMask,
         normalMap
     ] = await Promise.all([
 
         loadTexture(
-            './textures/rug_basecolor.png',
-            'Base color'
+            './textures/rug_basecolor.png'
         ),
 
         loadTexture(
-            './textures/rug_mask.png',
-            'Packed mask'
-        ),
-
-        loadTexture(
-            './textures/rug_normal.png',
-            'Normal map'
+            './textures/rug_normal.png'
         )
 
     ]);
 
 
-    // ------------------------------------------------------
-    // COLOR SPACES
-    // ------------------------------------------------------
-
-    // Visible color image.
+    // Color texture
     baseColor.colorSpace =
         THREE.SRGBColorSpace;
 
 
-    // Mathematical/PBR data.
-    packedMask.colorSpace =
-        THREE.NoColorSpace;
-
+    // Normal data
     normalMap.colorSpace =
         THREE.NoColorSpace;
 
 
-    // ------------------------------------------------------
-    // TILING
-    // ------------------------------------------------------
-
-    configureTexture(
-        baseColor
-    );
-
-    configureTexture(
-        packedMask
-    );
-
-    configureTexture(
-        normalMap
-    );
+    setupTexture(baseColor);
+    setupTexture(normalMap);
 
 
     // ------------------------------------------------------
     // GEOMETRY
-    //
-    // This is already subdivided enough that we can later
-    // replace it with our cloth simulation.
     // ------------------------------------------------------
 
     const geometry =
-        new THREE.PlaneGeometry(
-            RUG_WIDTH,
-            RUG_HEIGHT,
-
-            120,
-            68
-        );
+        createClothGeometry();
 
 
     // ------------------------------------------------------
     // MATERIAL
-    // ------------------------------------------------------
     //
-    // Three.js PBR packed maps commonly use:
-    //
-    // R = AO
-    // G = Roughness
-    // B = Metalness
-    //
-    // We use G and B here.
-    //
-    // This gives the packed texture real material influence
-    // instead of merely displaying the base-color image.
+    // Deliberately ignoring rug_mask.png for now.
+    // We first want the original base color + normal
+    // behaving like convincing cloth.
     // ------------------------------------------------------
 
     const material =
         new THREE.MeshPhysicalMaterial({
-
-            // ----------------------------------------------
-            // COLOR
-            // ----------------------------------------------
-
-            color:
-                new THREE.Color(
-                    0xffffff
-                ),
 
             map:
                 baseColor,
 
 
             // ----------------------------------------------
-            // NORMAL / WEAVE
+            // WEAVE NORMAL MAP
             // ----------------------------------------------
 
             normalMap:
                 normalMap,
 
-
-            // Your Blender shader inverted the Y channel,
-            // so Three.js does that here with a negative Y.
             normalScale:
                 new THREE.Vector2(
-                    0.9,
-                    -0.9
+                    1.15,
+                    -1.15
                 ),
 
 
             // ----------------------------------------------
-            // ROUGHNESS
-            //
-            // Three.js reads the GREEN channel.
-            // ----------------------------------------------
-
-            roughness:
-                0.92,
-
-            roughnessMap:
-                packedMask,
-
-
-            // ----------------------------------------------
-            // METALLIC VARIATION
-            //
-            // Three.js reads the BLUE channel.
-            //
-            // Kept relatively subtle because this is cloth,
-            // not a sheet of metal.
+            // CLOTH MATERIAL
             // ----------------------------------------------
 
             metalness:
-                0.32,
+                0.0,
 
-            metalnessMap:
-                packedMask,
+            roughness:
+                0.58,
 
 
-            // ----------------------------------------------
-            // FABRIC SHEEN
-            // ----------------------------------------------
-
+            // Fabric sheen
             sheen:
-                0.85,
+                1.0,
 
             sheenColor:
                 new THREE.Color(
-                    0xc7ad8b
+                    0xc49c7c
                 ),
 
             sheenRoughness:
-                0.68,
+                0.48,
 
-
-            // ----------------------------------------------
-            // SPECULAR RESPONSE
-            // ----------------------------------------------
 
             specularIntensity:
-                0.72,
+                0.45,
 
             specularColor:
                 new THREE.Color(
-                    0xfff3df
+                    0xffead4
                 ),
 
 
-            // Environment reflection strength.
             envMapIntensity:
-                1.15,
+                0.75,
 
 
-            // No plastic clear coat.
             clearcoat:
                 0,
 
@@ -503,7 +446,7 @@ async function createRug() {
 
 
     // ------------------------------------------------------
-    // CREATE MESH
+    // RUG MESH
     // ------------------------------------------------------
 
     const rug =
@@ -513,41 +456,33 @@ async function createRug() {
         );
 
 
-    scene.add(
-        rug
-    );
+    scene.add(rug);
 
 
-    // Useful when we begin cloth physics later.
+    // Very slight overall rotation prevents the lighting
+    // from looking perfectly computer-flat.
+    rug.rotation.x =
+        THREE.MathUtils.degToRad(-1.0);
+
+    rug.rotation.y =
+        THREE.MathUtils.degToRad(1.2);
+
+
+    // Save these globally so the next physics version
+    // can reuse the same object.
     window.rug =
         rug;
 
     window.rugMaterial =
         material;
 
-    window.rugPackedMask =
-        packedMask;
-
-
-    console.log(
-        'PORPHYRA rug ready'
-    );
-
-    console.log(
-        `Texture tiling: ${REPEAT_X.toFixed(2)} × ${REPEAT_Y.toFixed(2)}`
-    );
-
 
     return rug;
-
 }
 
 
 // ----------------------------------------------------------
-// CAMERA FITTING
-//
-// Automatically keeps the rug inside the iframe/page
-// regardless of monitor or Wix embed dimensions.
+// CAMERA FIT
 // ----------------------------------------------------------
 
 function fitCamera() {
@@ -555,7 +490,6 @@ function fitCamera() {
     camera.aspect =
         window.innerWidth /
         window.innerHeight;
-
 
     camera.updateProjectionMatrix();
 
@@ -566,35 +500,30 @@ function fitCamera() {
         );
 
 
-    const distanceForHeight =
+    const distanceHeight =
         (RUG_HEIGHT / 2) /
-        Math.tan(
-            fov / 2
-        );
+        Math.tan(fov / 2);
 
 
-    const distanceForWidth =
+    const distanceWidth =
         (RUG_WIDTH / 2) /
         (
-            Math.tan(
-                fov / 2
-            ) *
+            Math.tan(fov / 2) *
             camera.aspect
         );
 
 
     const distance =
         Math.max(
-            distanceForHeight,
-            distanceForWidth
+            distanceHeight,
+            distanceWidth
         );
 
 
-    // 1.10 gives us the black border around the textile.
     camera.position.set(
         0,
         0,
-        distance * 1.10
+        distance * 1.12
     );
 
 
@@ -622,12 +551,10 @@ window.addEventListener(
             )
         );
 
-
         renderer.setSize(
             window.innerWidth,
             window.innerHeight
         );
-
 
         fitCamera();
 
@@ -640,14 +567,10 @@ window.addEventListener(
 // ----------------------------------------------------------
 
 const loading =
-    document.getElementById(
-        'loading'
-    );
+    document.getElementById('loading');
 
 const errorBox =
-    document.getElementById(
-        'error'
-    );
+    document.getElementById('error');
 
 
 try {
@@ -656,27 +579,20 @@ try {
 
     await createRug();
 
-
     loading.classList.add(
         'hidden'
     );
-
 
 } catch (error) {
 
-    console.error(
-        error
-    );
-
+    console.error(error);
 
     loading.classList.add(
         'hidden'
     );
 
-
     errorBox.style.display =
         'block';
-
 
     errorBox.textContent =
         error.message;
@@ -685,13 +601,7 @@ try {
 
 
 // ----------------------------------------------------------
-// RENDER LOOP
-//
-// Later this loop will also run:
-// - cloth physics
-// - mouse collision
-// - spring movement
-// - wrinkle settling
+// RENDER
 // ----------------------------------------------------------
 
 renderer.setAnimationLoop(
