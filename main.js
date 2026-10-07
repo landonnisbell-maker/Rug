@@ -10,24 +10,29 @@ import {
 
 
 // ==========================================================
-// PORPHYRA — INTERACTIVE CLOTH v11.2b
+// PORPHYRA — INTERACTIVE CLOTH v11.2c
 //
-// VISIBLE BEVELED RUG THICKNESS
+// PERMANENT WOVEN RUG EDGE
 //
-// Includes:
-// - v10 cinematic lighting
-// - v11.1 dynamic fold occlusion
+// Keeps:
+// - cinematic lighting
 // - anisotropic silk
-// - moving self-shadows
-// - real underside geometry
-// - real perimeter side walls
-// - thickness following moving cloth normals
+// - real moving shadows
+// - dynamic fold occlusion
+// - smooth ripple physics
+// - directional folds
 //
-// NEW IN v11.2b:
-// - thicker visible textile profile
-// - underside perimeter inset = beveled edge
-// - slightly flexible visual perimeter
-// - subtle off-axis camera so thickness can actually be seen
+// REMOVED:
+// - dark backside mesh
+// - exposed underside
+// - forced angled camera
+// - flexible/flipping perimeter
+//
+// NEW:
+// - permanent woven edge band
+// - beveled / rounded-looking profile
+// - edge visible even when rug is static
+// - straight-on product camera restored
 // ==========================================================
 
 
@@ -46,90 +51,48 @@ const ROWS = SEGMENTS_Y + 1;
 
 
 // ==========================================================
-// REAL RUG THICKNESS — v11.2b
+// WOVEN EDGE BAND — v11.2c
 // ==========================================================
 //
-// 0.055 was physically there, but extremely difficult to see
-// from the nearly perpendicular camera.
+// The edge no longer tries to show a backside.
 //
-// 0.075 is still textile-like, but gives the edge enough
-// depth to become visible.
+// Instead, the rug has a slightly enlarged woven perimeter
+// that protrudes beyond the top silhouette.
 //
+// Cross-section:
+//
+// silk top
+// ─────────────────
+//    ╲
+//     ╲ woven edge
+//      ╲
+//
+// Because the edge protrudes OUTWARD in X/Y, it can be seen
+// even from the straight-on camera.
 // ==========================================================
 
-const RUG_THICKNESS = 0.075;
+
+// How far the final edge protrudes past the rug silhouette.
+const EDGE_BAND_OUTSET = 0.060;
 
 
-// ----------------------------------------------------------
-// BEVELED EDGE
-// ----------------------------------------------------------
-//
-// The bottom perimeter is pulled slightly toward the center
-// of the rug.
-//
-// Instead of:
-//
-// |
-//
-// the edge profile becomes approximately:
-//
-// \
-//
-// This catches light and makes the cross-section visible.
-// ----------------------------------------------------------
-
-const EDGE_BEVEL_INSET = 0.045;
+// Intermediate bevel point.
+const EDGE_BAND_MID_OUTSET = 0.030;
 
 
-// Dark woven underside.
-const UNDERSIDE_COLOR =
+// Small amount the midpoint recedes behind the silk.
+const EDGE_BAND_MID_DEPTH = 0.012;
+
+
+// Final depth of the outer woven edge.
+const EDGE_BAND_DEPTH = 0.038;
+
+
+// Edge color.
+const EDGE_BAND_COLOR =
     new THREE.Color(
-        0x30201b
+        0x604536
     );
-
-
-// Slightly warmer visible woven edge.
-const EDGE_COLOR =
-    new THREE.Color(
-        0x654939
-    );
-
-
-// ==========================================================
-// CAMERA — v11.2b
-// ==========================================================
-//
-// Still essentially a front-facing product shot.
-//
-// The small Y offset introduces only a few degrees of angle,
-// which is enough for the lower/near edge to become visible.
-//
-// ==========================================================
-
-const CAMERA_X_OFFSET =
-    RUG_WIDTH * 0.008;
-
-const CAMERA_Y_OFFSET =
-    -RUG_HEIGHT * 0.10;
-
-const CAMERA_DISTANCE_MULT =
-    1.13;
-
-
-// ==========================================================
-// PERIMETER FLEX — v11.2b
-// ==========================================================
-//
-// Physics still remain stable.
-//
-// This only prevents the procedural folds from fading all
-// the way to zero at the very outer edge.
-//
-// ==========================================================
-
-const EDGE_FOLD_MINIMUM = 0.16;
-
-const EDGE_DRAG_MINIMUM = 0.04;
 
 
 // ==========================================================
@@ -167,7 +130,7 @@ const SILK_SHEEN = 0.82;
 const SILK_SHEEN_ROUGHNESS = 0.48;
 
 
-// Your preferred dark cinematic environment level.
+// Your preferred darker lighting level.
 const ENVIRONMENT_INTENSITY = 0.22;
 
 
@@ -244,7 +207,7 @@ const MAX_DRAG_AMOUNT = 0.060;
 
 
 // ==========================================================
-// FIXED TIMESTEP
+// FIXED PHYSICS TIMESTEP
 // ==========================================================
 
 const FIXED_TIMESTEP =
@@ -264,6 +227,7 @@ let physicsAccumulator =
 const scene =
     new THREE.Scene();
 
+
 scene.background =
     new THREE.Color(
         0x000000
@@ -276,11 +240,16 @@ scene.background =
 
 const camera =
     new THREE.PerspectiveCamera(
+
         32,
+
         window.innerWidth /
         window.innerHeight,
+
         0.1,
+
         100
+
     );
 
 
@@ -291,7 +260,8 @@ const camera =
 const renderer =
     new THREE.WebGLRenderer({
 
-        antialias: true,
+        antialias:
+            true,
 
         powerPreference:
             'high-performance'
@@ -302,8 +272,11 @@ const renderer =
 renderer.setPixelRatio(
 
     Math.min(
+
         window.devicePixelRatio,
+
         2
+
     )
 
 );
@@ -312,6 +285,7 @@ renderer.setPixelRatio(
 renderer.setSize(
 
     window.innerWidth,
+
     window.innerHeight
 
 );
@@ -406,9 +380,13 @@ const warmAreaKey =
 
 
 warmAreaKey.position.set(
+
     -3.8,
+
     3.2,
+
     4.2
+
 );
 
 
@@ -437,7 +415,8 @@ const shadowKey =
 
         20,
 
-        Math.PI / 3.25,
+        Math.PI /
+        3.25,
 
         0.72,
 
@@ -447,9 +426,13 @@ const shadowKey =
 
 
 shadowKey.position.set(
+
     -4.8,
+
     3.8,
+
     5.0
+
 );
 
 
@@ -525,9 +508,13 @@ const coolFill =
 
 
 coolFill.position.set(
+
     4.0,
+
     -2.8,
+
     3.3
+
 );
 
 
@@ -562,9 +549,13 @@ const rimLight =
 
 
 rimLight.position.set(
+
     1.5,
+
     4.5,
+
     2.6
+
 );
 
 
@@ -588,7 +579,9 @@ const textureLoader =
     new THREE.TextureLoader();
 
 
-async function loadTexture(path) {
+async function loadTexture(
+    path
+) {
 
     return await textureLoader.loadAsync(
         path
@@ -597,7 +590,9 @@ async function loadTexture(path) {
 }
 
 
-function configureTexture(texture) {
+function configureTexture(
+    texture
+) {
 
     texture.wrapS =
         THREE.RepeatWrapping;
@@ -608,8 +603,11 @@ function configureTexture(texture) {
 
 
     texture.repeat.set(
+
         REPEAT_X,
+
         REPEAT_Y
+
     );
 
 
@@ -640,9 +638,12 @@ function configureTexture(texture) {
 // HTML IMAGE LOADING
 // ==========================================================
 
-function loadHtmlImage(path) {
+function loadHtmlImage(
+    path
+) {
 
     return new Promise(
+
         (
             resolve,
             reject
@@ -680,6 +681,7 @@ function loadHtmlImage(path) {
                 path;
 
         }
+
     );
 
 }
@@ -790,9 +792,13 @@ function linearToSrgbByte(
 
 
 function linearRamp(
+
     value,
+
     blackPosition,
+
     whitePosition
+
 ) {
 
     return Math.max(
@@ -868,7 +874,7 @@ async function createV10SilkMaps() {
 
 
     // ------------------------------------------------------
-    // BASE IMAGE
+    // BASE COLOR CANVAS
     // ------------------------------------------------------
 
     const baseCanvas =
@@ -935,7 +941,7 @@ async function createV10SilkMaps() {
 
 
     // ------------------------------------------------------
-    // MASK
+    // MASK CANVAS
     // ------------------------------------------------------
 
     const maskCanvas =
@@ -1027,7 +1033,9 @@ async function createV10SilkMaps() {
         const canvas of [
 
             colorCanvas,
+
             metalCanvas,
+
             roughCanvas
 
         ]
@@ -1062,9 +1070,11 @@ async function createV10SilkMaps() {
 
 
     if (
+
         !colorContext ||
         !metalContext ||
         !roughContext
+
     ) {
 
         throw new Error(
@@ -1076,22 +1086,31 @@ async function createV10SilkMaps() {
 
     const colorOutput =
         colorContext.createImageData(
+
             width,
+
             imageHeight
+
         );
 
 
     const metalOutput =
         metalContext.createImageData(
+
             width,
+
             imageHeight
+
         );
 
 
     const roughOutput =
         roughContext.createImageData(
+
             width,
+
             imageHeight
+
         );
 
 
@@ -1120,9 +1139,13 @@ async function createV10SilkMaps() {
     // ------------------------------------------------------
 
     for (
+
         let i = 0;
+
         i < basePixels.length;
+
         i += 4
+
     ) {
 
         const maskR =
@@ -1131,12 +1154,16 @@ async function createV10SilkMaps() {
 
 
         const maskG =
-            maskPixels[i + 1] /
+            maskPixels[
+                i + 1
+            ] /
             255;
 
 
         const maskB =
-            maskPixels[i + 2] /
+            maskPixels[
+                i + 2
+            ] /
             255;
 
 
@@ -1220,7 +1247,7 @@ async function createV10SilkMaps() {
 
 
         // --------------------------------------------------
-        // CONTROLLED METALLIC THREAD
+        // METALLIC THREAD RESPONSE
         // --------------------------------------------------
 
         const blenderMetal =
@@ -1229,13 +1256,16 @@ async function createV10SilkMaps() {
                 maskR,
 
                 0.340,
+
                 0.578
 
             );
 
 
         const metalness =
+
             blenderMetal *
+
             MAX_METALNESS;
 
 
@@ -1243,6 +1273,7 @@ async function createV10SilkMaps() {
             Math.round(
 
                 metalness *
+
                 255
 
             );
@@ -1280,6 +1311,7 @@ async function createV10SilkMaps() {
                 maskB,
 
                 0.051,
+
                 0.763
 
             );
@@ -1303,6 +1335,7 @@ async function createV10SilkMaps() {
             Math.round(
 
                 roughness *
+
                 255
 
             );
@@ -1333,7 +1366,7 @@ async function createV10SilkMaps() {
 
 
     // ------------------------------------------------------
-    // WRITE
+    // WRITE PIXELS
     // ------------------------------------------------------
 
     colorContext.putImageData(
@@ -1456,22 +1489,14 @@ let restZ;
 
 
 // ==========================================================
-// THICKNESS STATE
+// WOVEN EDGE STATE
 // ==========================================================
 
-let undersideGeometry;
+let edgeBandGeometry;
 
-let undersidePositions;
+let edgeBandPositions;
 
-let undersideMesh;
-
-
-let edgeGeometry;
-
-let edgePositions;
-
-let edgeMesh;
-
+let edgeBandMesh;
 
 let perimeterIndices =
     [];
@@ -1487,9 +1512,14 @@ function indexOf(
 ) {
 
     return (
+
         y *
-        COLS +
+        COLS
+
+        +
+
         x
+
     );
 
 }
@@ -1550,100 +1580,16 @@ function smoothstep01(
     return (
 
         t *
+
         t *
 
         (
             3 -
-            2 * t
+            2 *
+            t
         )
 
     );
-
-}
-
-
-// ==========================================================
-// EDGE BEVEL OFFSET — NEW
-// ==========================================================
-//
-// Returns an X/Y inset for the underside perimeter.
-//
-// The top edge remains full-size.
-// The underside edge is slightly smaller.
-//
-// ==========================================================
-
-function getBevelInsetForVertex(
-    vertexIndex
-) {
-
-    const x =
-        vertexIndex %
-        COLS;
-
-
-    const y =
-        Math.floor(
-            vertexIndex /
-            COLS
-        );
-
-
-    let insetX =
-        0;
-
-
-    let insetY =
-        0;
-
-
-    if (
-        x === 0
-    ) {
-
-        insetX +=
-            EDGE_BEVEL_INSET;
-
-    }
-    else if (
-        x ===
-        COLS - 1
-    ) {
-
-        insetX -=
-            EDGE_BEVEL_INSET;
-
-    }
-
-
-    if (
-        y === 0
-    ) {
-
-        insetY +=
-            EDGE_BEVEL_INSET;
-
-    }
-    else if (
-        y ===
-        ROWS - 1
-    ) {
-
-        insetY -=
-            EDGE_BEVEL_INSET;
-
-    }
-
-
-    return {
-
-        x:
-            insetX,
-
-        y:
-            insetY
-
-    };
 
 }
 
@@ -1662,7 +1608,9 @@ function restingHeight(
         Math.sin(
 
             x *
-            1.15 +
+            1.15
+
+            +
 
             y *
             0.40
@@ -1679,7 +1627,9 @@ function restingHeight(
         Math.sin(
 
             x *
-            2.5 -
+            2.5
+
+            -
 
             y *
             1.25
@@ -1696,7 +1646,9 @@ function restingHeight(
         Math.sin(
 
             y *
-            3.4 +
+            3.4
+
+            +
 
             x *
             0.7
@@ -1711,7 +1663,9 @@ function restingHeight(
     return (
 
         wave1 +
+
         wave2 +
+
         wave3
 
     );
@@ -1726,7 +1680,8 @@ function restingHeight(
 function initializeClothPhysics() {
 
     positions =
-        geometry.attributes
+        geometry
+            .attributes
             .position;
 
 
@@ -1776,9 +1731,13 @@ function initializeClothPhysics() {
 
 
     for (
+
         let i = 0;
+
         i < count;
+
         i++
+
     ) {
 
         const x =
@@ -1977,6 +1936,7 @@ function onPointerMove(
     raycaster.setFromCamera(
 
         pointerNDC,
+
         camera
 
     );
@@ -1988,6 +1948,7 @@ function onPointerMove(
             .intersectPlane(
 
                 interactionPlane,
+
                 intersection
 
             );
@@ -2105,6 +2066,7 @@ function onPointerLeave() {
 renderer.domElement.addEventListener(
 
     'pointermove',
+
     onPointerMove
 
 );
@@ -2113,6 +2075,7 @@ renderer.domElement.addEventListener(
 renderer.domElement.addEventListener(
 
     'pointerleave',
+
     onPointerLeave
 
 );
@@ -2129,13 +2092,21 @@ function updateSmoothPointer(
     const presenceTarget =
 
         pointerActive
-            ? 1
-            : 0;
+
+            ?
+
+            1
+
+            :
+
+            0;
 
 
     const presenceFollow =
 
-        1 -
+        1
+
+        -
 
         Math.exp(
             -10 *
@@ -2182,11 +2153,14 @@ function updateSmoothPointer(
 
     const follow =
 
-        1 -
+        1
+
+        -
 
         Math.exp(
 
             -POINTER_FOLLOW_SPEED *
+
             dt
 
         );
@@ -2273,11 +2247,14 @@ function updateSmoothPointer(
 
     const speedFollow =
 
-        1 -
+        1
+
+        -
 
         Math.exp(
 
             -SPEED_SMOOTHING *
+
             dt
 
         );
@@ -2298,6 +2275,7 @@ function updateSmoothPointer(
     if (
 
         instantaneousSpeed >
+
         DIRECTION_UPDATE_THRESHOLD
 
     ) {
@@ -2305,22 +2283,27 @@ function updateSmoothPointer(
         const targetDirX =
 
             instantaneousVX /
+
             instantaneousSpeed;
 
 
         const targetDirY =
 
             instantaneousVY /
+
             instantaneousSpeed;
 
 
         const directionFollow =
 
-            1 -
+            1
+
+            -
 
             Math.exp(
 
                 -DIRECTION_FOLLOW_SPEED *
+
                 dt
 
             );
@@ -2368,6 +2351,7 @@ function updateSmoothPointer(
         if (
 
             directionLength >
+
             0.0001
 
         ) {
@@ -2436,7 +2420,9 @@ function getPointerEffect() {
             lerp(
 
                 MIN_BULGE,
+
                 MAX_BULGE,
+
                 speed01
 
             ),
@@ -2447,7 +2433,9 @@ function getPointerEffect() {
             lerp(
 
                 MIN_RADIUS,
+
                 MAX_RADIUS,
+
                 speed01
 
             ),
@@ -2458,7 +2446,9 @@ function getPointerEffect() {
             lerp(
 
                 MIN_POINTER_STIFFNESS,
+
                 MAX_POINTER_STIFFNESS,
+
                 speed01
 
             ),
@@ -2469,7 +2459,9 @@ function getPointerEffect() {
             lerp(
 
                 SLOW_POINTER_DAMPING,
+
                 FAST_POINTER_DAMPING,
+
                 speed01
 
             )
@@ -2509,7 +2501,9 @@ function simulateCloth(
     for (
 
         let y = 1;
+
         y < ROWS - 1;
+
         y++
 
     ) {
@@ -2517,7 +2511,9 @@ function simulateCloth(
         for (
 
             let x = 1;
+
             x < COLS - 1;
+
             x++
 
         ) {
@@ -2561,8 +2557,11 @@ function simulateCloth(
 
                 (
                     height[left] +
+
                     height[right] +
+
                     height[down] +
+
                     height[up]
                 )
 
@@ -2586,6 +2585,7 @@ function simulateCloth(
             acceleration[i] +=
 
                 -height[i] *
+
                 RESTORE_FORCE;
 
         }
@@ -2600,6 +2600,7 @@ function simulateCloth(
     if (
 
         pointerActive &&
+
         hasSmoothPointer
 
     ) {
@@ -2611,13 +2612,16 @@ function simulateCloth(
         const radiusSquared =
 
             effect.radius *
+
             effect.radius;
 
 
         for (
 
             let y = 1;
+
             y < ROWS - 1;
+
             y++
 
         ) {
@@ -2625,7 +2629,9 @@ function simulateCloth(
             for (
 
                 let x = 1;
+
                 x < COLS - 1;
+
                 x++
 
             ) {
@@ -2676,7 +2682,9 @@ function simulateCloth(
 
                     let influence =
 
-                        1 -
+                        1
+
+                        -
 
                         distance /
                         effect.radius;
@@ -2692,25 +2700,30 @@ function simulateCloth(
                     const targetHeight =
 
                         effect.bulge *
+
                         influence;
 
 
                     const error =
 
                         targetHeight -
+
                         height[i];
 
 
                     acceleration[i] +=
 
                         error *
+
                         effect.stiffness;
 
 
                     acceleration[i] -=
 
                         velocity[i] *
+
                         effect.localDamping *
+
                         influence;
 
                 }
@@ -2729,15 +2742,20 @@ function simulateCloth(
     const frameDamping =
 
         Math.pow(
+
             DAMPING,
+
             step
+
         );
 
 
     for (
 
         let y = 1;
+
         y < ROWS - 1;
+
         y++
 
     ) {
@@ -2745,7 +2763,9 @@ function simulateCloth(
         for (
 
             let x = 1;
+
             x < COLS - 1;
+
             x++
 
         ) {
@@ -2760,6 +2780,7 @@ function simulateCloth(
             velocity[i] +=
 
                 acceleration[i] *
+
                 step;
 
 
@@ -2770,6 +2791,7 @@ function simulateCloth(
             height[i] +=
 
                 velocity[i] *
+
                 step;
 
         }
@@ -2778,20 +2800,22 @@ function simulateCloth(
 
 
     // ------------------------------------------------------
-    // STABLE PHYSICS EDGES
+    // PIN PERIMETER
     // ------------------------------------------------------
     //
-    // The physical edge remains pinned for stability.
+    // Restored from the original stable version.
     //
-    // v11.2b adds a small amount of procedural fold motion
-    // later in updateGeometry(), so visually it no longer
-    // looks completely rigid.
+    // We no longer try to curl the outer border.
     // ------------------------------------------------------
 
     for (
+
         let x = 0;
+
         x < COLS;
+
         x++
+
     ) {
 
         const bottom =
@@ -2827,9 +2851,13 @@ function simulateCloth(
 
 
     for (
+
         let y = 0;
+
         y < ROWS;
+
         y++
+
     ) {
 
         const left =
@@ -2875,7 +2903,9 @@ function updateDynamicOcclusion() {
     if (
 
         !positions ||
+
         !vertexColors ||
+
         !restZ
 
     ) {
@@ -2904,15 +2934,23 @@ function updateDynamicOcclusion() {
 
 
     for (
+
         let y = 0;
+
         y < ROWS;
+
         y++
+
     ) {
 
         for (
+
             let x = 0;
+
             x < COLS;
+
             x++
+
         ) {
 
             const i =
@@ -2934,8 +2972,11 @@ function updateDynamicOcclusion() {
             if (
 
                 x > 0 &&
+
                 x < COLS - 1 &&
+
                 y > 0 &&
+
                 y < ROWS - 1
 
             ) {
@@ -3027,8 +3068,11 @@ function updateDynamicOcclusion() {
 
                     (
                         leftDisp +
+
                         rightDisp +
+
                         downDisp +
+
                         upDisp
                     )
 
@@ -3040,6 +3084,7 @@ function updateDynamicOcclusion() {
                 const curvature =
 
                     neighborAverage -
+
                     centerDisp;
 
 
@@ -3099,6 +3144,7 @@ function updateDynamicOcclusion() {
                 const edgeDistanceX =
 
                     halfWidth -
+
                     Math.abs(
                         restX[i]
                     );
@@ -3107,6 +3153,7 @@ function updateDynamicOcclusion() {
                 const edgeDistanceY =
 
                     halfHeight -
+
                     Math.abs(
                         restY[i]
                     );
@@ -3186,7 +3233,7 @@ function updateDynamicOcclusion() {
 
 
 // ==========================================================
-// BUILD PERIMETER INDEX LOOP
+// PERIMETER LOOP
 // ==========================================================
 
 function buildPerimeterIndices() {
@@ -3197,16 +3244,22 @@ function buildPerimeterIndices() {
 
     // Bottom: left -> right
     for (
+
         let x = 0;
+
         x < COLS;
+
         x++
+
     ) {
 
         result.push(
+
             indexOf(
                 x,
                 0
             )
+
         );
 
     }
@@ -3214,16 +3267,22 @@ function buildPerimeterIndices() {
 
     // Right: bottom -> top
     for (
+
         let y = 1;
+
         y < ROWS;
+
         y++
+
     ) {
 
         result.push(
+
             indexOf(
                 COLS - 1,
                 y
             )
+
         );
 
     }
@@ -3231,16 +3290,22 @@ function buildPerimeterIndices() {
 
     // Top: right -> left
     for (
+
         let x = COLS - 2;
+
         x >= 0;
+
         x--
+
     ) {
 
         result.push(
+
             indexOf(
                 x,
                 ROWS - 1
             )
+
         );
 
     }
@@ -3248,16 +3313,22 @@ function buildPerimeterIndices() {
 
     // Left: top -> bottom
     for (
+
         let y = ROWS - 2;
+
         y >= 1;
+
         y--
+
     ) {
 
         result.push(
+
             indexOf(
                 0,
                 y
             )
+
         );
 
     }
@@ -3269,206 +3340,287 @@ function buildPerimeterIndices() {
 
 
 // ==========================================================
-// CREATE REAL THICKNESS SHELL
+// OUTWARD DIRECTION FOR EDGE VERTEX
+// ==========================================================
+//
+// Determines which direction is "outside" the rectangle.
+//
+// At corners, the result becomes diagonal.
 // ==========================================================
 
-function createThicknessShell() {
+function getOutwardDirection(
+    vertexIndex
+) {
+
+    const x =
+
+        vertexIndex %
+
+        COLS;
+
+
+    const y =
+
+        Math.floor(
+
+            vertexIndex /
+
+            COLS
+
+        );
+
+
+    let outwardX =
+        0;
+
+
+    let outwardY =
+        0;
+
+
+    if (
+        x === 0
+    ) {
+
+        outwardX -=
+            1;
+
+    }
+
+
+    if (
+        x ===
+        COLS - 1
+    ) {
+
+        outwardX +=
+            1;
+
+    }
+
+
+    if (
+        y === 0
+    ) {
+
+        outwardY -=
+            1;
+
+    }
+
+
+    if (
+        y ===
+        ROWS - 1
+    ) {
+
+        outwardY +=
+            1;
+
+    }
+
+
+    const length =
+
+        Math.sqrt(
+
+            outwardX *
+            outwardX
+
+            +
+
+            outwardY *
+            outwardY
+
+        );
+
+
+    if (
+        length >
+        0.0001
+    ) {
+
+        outwardX /=
+            length;
+
+
+        outwardY /=
+            length;
+
+    }
+
+
+    return {
+
+        x:
+            outwardX,
+
+        y:
+            outwardY
+
+    };
+
+}
+
+
+// ==========================================================
+// CREATE PERMANENT WOVEN EDGE BAND
+// ==========================================================
+//
+// Every perimeter point receives:
+//
+// 0 = silk-edge position
+// 1 = bevel midpoint
+// 2 = outer woven edge
+//
+// This gives the border TWO sloping faces instead of one
+// flat rectangle.
+//
+// ==========================================================
+
+function createWovenEdgeBand() {
 
     perimeterIndices =
         buildPerimeterIndices();
 
 
-    // ======================================================
-    // UNDERSIDE
-    // ======================================================
-
-    undersideGeometry =
-        geometry.clone();
-
-
-    undersideGeometry.deleteAttribute(
-        'color'
-    );
-
-
-    undersidePositions =
-        undersideGeometry
-            .attributes
-            .position;
-
-
-    undersidePositions.setUsage(
-        THREE.DynamicDrawUsage
-    );
-
-
-    const undersideMaterial =
-        new THREE.MeshPhysicalMaterial({
-
-            color:
-                UNDERSIDE_COLOR,
-
-
-            metalness:
-                0,
-
-
-            roughness:
-                0.88,
-
-
-            sheen:
-                0.10,
-
-
-            sheenColor:
-                new THREE.Color(
-                    0x806458
-                ),
-
-
-            sheenRoughness:
-                0.88,
-
-
-            envMapIntensity:
-                0.08,
-
-
-            side:
-                THREE.DoubleSide
-
-        });
-
-
-    undersideMaterial.shadowSide =
-        THREE.DoubleSide;
-
-
-    undersideMesh =
-        new THREE.Mesh(
-
-            undersideGeometry,
-
-            undersideMaterial
-
-        );
-
-
-    undersideMesh.castShadow =
-        true;
-
-
-    undersideMesh.receiveShadow =
-        true;
-
-
-    undersideMesh.frustumCulled =
-        false;
-
-
-    scene.add(
-        undersideMesh
-    );
-
-
-    // ======================================================
-    // BEVELED SIDE WALLS
-    // ======================================================
-
     const perimeterCount =
         perimeterIndices.length;
 
 
-    const sidePositionArray =
+    const vertexCount =
+
+        perimeterCount *
+
+        3;
+
+
+    const positionArray =
         new Float32Array(
 
-            perimeterCount *
-            2 *
+            vertexCount *
+
             3
 
         );
 
 
-    edgeGeometry =
+    edgeBandGeometry =
         new THREE.BufferGeometry();
 
 
-    edgePositions =
+    edgeBandPositions =
         new THREE.BufferAttribute(
 
-            sidePositionArray,
+            positionArray,
 
             3
 
         );
 
 
-    edgePositions.setUsage(
+    edgeBandPositions.setUsage(
         THREE.DynamicDrawUsage
     );
 
 
-    edgeGeometry.setAttribute(
+    edgeBandGeometry.setAttribute(
 
         'position',
 
-        edgePositions
+        edgeBandPositions
 
     );
 
 
-    const sideIndices =
+    const indices =
         [];
 
 
+    // ------------------------------------------------------
+    // TWO CONNECTED STRIPS
+    //
+    // inner -> middle
+    // middle -> outer
+    // ------------------------------------------------------
+
     for (
-        let i = 0;
-        i < perimeterCount;
-        i++
+
+        let p = 0;
+
+        p < perimeterCount;
+
+        p++
+
     ) {
 
         const next =
+
             (
-                i + 1
+                p + 1
             )
+
             %
+
             perimeterCount;
 
 
-        const topA =
-            i * 2;
+        const innerA =
+            p * 3;
 
 
-        const bottomA =
-            topA + 1;
+        const middleA =
+            innerA + 1;
 
 
-        const topB =
-            next * 2;
+        const outerA =
+            innerA + 2;
 
 
-        const bottomB =
-            topB + 1;
+        const innerB =
+            next * 3;
 
 
-        sideIndices.push(
+        const middleB =
+            innerB + 1;
 
-            topA,
-            bottomA,
-            topB,
 
-            bottomA,
-            bottomB,
-            topB
+        const outerB =
+            innerB + 2;
+
+
+        // Inner bevel.
+        indices.push(
+
+            innerA,
+            middleA,
+            innerB,
+
+            middleA,
+            middleB,
+            innerB
+
+        );
+
+
+        // Outer bevel.
+        indices.push(
+
+            middleA,
+            outerA,
+            middleB,
+
+            outerA,
+            outerB,
+            middleB
 
         );
 
     }
 
 
-    edgeGeometry.setIndex(
-        sideIndices
+    edgeBandGeometry.setIndex(
+        indices
     );
 
 
@@ -3476,45 +3628,43 @@ function createThicknessShell() {
         new THREE.MeshPhysicalMaterial({
 
             color:
-                EDGE_COLOR,
+                EDGE_BAND_COLOR,
 
 
             metalness:
                 0,
 
 
-            // Slightly smoother than v11.2 so the bevel
-            // can catch a thin highlight.
             roughness:
-                0.70,
+                0.82,
 
 
             sheen:
-                0.28,
+                0.20,
 
 
             sheenColor:
                 new THREE.Color(
-                    0xb58c72
+                    0xa67b64
                 ),
 
 
             sheenRoughness:
-                0.66,
+                0.78,
 
 
             specularIntensity:
-                0.32,
+                0.28,
 
 
             specularColor:
                 new THREE.Color(
-                    0xe4c6af
+                    0xd8b9a1
                 ),
 
 
             envMapIntensity:
-                0.18,
+                0.12,
 
 
             side:
@@ -3527,62 +3677,49 @@ function createThicknessShell() {
         THREE.DoubleSide;
 
 
-    edgeMesh =
+    edgeBandMesh =
         new THREE.Mesh(
 
-            edgeGeometry,
+            edgeBandGeometry,
 
             edgeMaterial
 
         );
 
 
-    edgeMesh.castShadow =
+    edgeBandMesh.castShadow =
         true;
 
 
-    edgeMesh.receiveShadow =
+    edgeBandMesh.receiveShadow =
         true;
 
 
-    edgeMesh.frustumCulled =
+    edgeBandMesh.frustumCulled =
         false;
 
 
     scene.add(
-        edgeMesh
+        edgeBandMesh
     );
 
 
-    updateThicknessGeometry();
+    updateWovenEdgeBand();
 
 }
 
 
 // ==========================================================
-// UPDATE REAL RUG THICKNESS — v11.2b
-// ==========================================================
-//
-// Bottom position:
-//
-// top
-// - normal × thickness
-// + perimeter inset
-//
-// The normal offset makes thickness rotate with the cloth.
-//
-// The inset gives the side wall a visible slope/bevel.
-//
+// UPDATE WOVEN EDGE BAND
 // ==========================================================
 
-function updateThicknessGeometry() {
+function updateWovenEdgeBand() {
 
     if (
 
-        !undersideGeometry ||
-        !undersidePositions ||
-        !edgeGeometry ||
-        !edgePositions
+        !edgeBandGeometry ||
+
+        !edgeBandPositions
 
     ) {
 
@@ -3592,6 +3729,7 @@ function updateThicknessGeometry() {
 
 
     const topArray =
+
         geometry
             .attributes
             .position
@@ -3599,136 +3737,15 @@ function updateThicknessGeometry() {
 
 
     const normalArray =
+
         geometry
             .attributes
             .normal
             .array;
 
 
-    const bottomArray =
-        undersidePositions
-            .array;
-
-
-    const vertexCount =
-        positions.count;
-
-
-    // ------------------------------------------------------
-    // UPDATE UNDERSIDE
-    // ------------------------------------------------------
-
-    for (
-        let i = 0;
-        i < vertexCount;
-        i++
-    ) {
-
-        const offset =
-            i * 3;
-
-
-        const tx =
-            topArray[
-                offset
-            ];
-
-
-        const ty =
-            topArray[
-                offset + 1
-            ];
-
-
-        const tz =
-            topArray[
-                offset + 2
-            ];
-
-
-        const nx =
-            normalArray[
-                offset
-            ];
-
-
-        const ny =
-            normalArray[
-                offset + 1
-            ];
-
-
-        const nz =
-            normalArray[
-                offset + 2
-            ];
-
-
-        const bevel =
-            getBevelInsetForVertex(
-                i
-            );
-
-
-        bottomArray[
-            offset
-        ] =
-
-            tx
-
-            -
-
-            nx *
-            RUG_THICKNESS
-
-            +
-
-            bevel.x;
-
-
-        bottomArray[
-            offset + 1
-        ] =
-
-            ty
-
-            -
-
-            ny *
-            RUG_THICKNESS
-
-            +
-
-            bevel.y;
-
-
-        bottomArray[
-            offset + 2
-        ] =
-
-            tz
-
-            -
-
-            nz *
-            RUG_THICKNESS;
-
-    }
-
-
-    undersidePositions.needsUpdate =
-        true;
-
-
-    undersideGeometry.computeVertexNormals();
-
-
-    // ------------------------------------------------------
-    // UPDATE BEVELED SIDE WALLS
-    // ------------------------------------------------------
-
-    const edgeArray =
-        edgePositions.array;
+    const bandArray =
+        edgeBandPositions.array;
 
 
     const perimeterCount =
@@ -3736,9 +3753,13 @@ function updateThicknessGeometry() {
 
 
     for (
+
         let p = 0;
+
         p < perimeterCount;
+
         p++
+
     ) {
 
         const sourceIndex =
@@ -3746,86 +3767,229 @@ function updateThicknessGeometry() {
 
 
         const sourceOffset =
+
             sourceIndex *
+
             3;
 
 
-        const topVertexOffset =
+        const tx =
+
+            topArray[
+                sourceOffset
+            ];
+
+
+        const ty =
+
+            topArray[
+                sourceOffset + 1
+            ];
+
+
+        const tz =
+
+            topArray[
+                sourceOffset + 2
+            ];
+
+
+        const nx =
+
+            normalArray[
+                sourceOffset
+            ];
+
+
+        const ny =
+
+            normalArray[
+                sourceOffset + 1
+            ];
+
+
+        const nz =
+
+            normalArray[
+                sourceOffset + 2
+            ];
+
+
+        const outward =
+            getOutwardDirection(
+                sourceIndex
+            );
+
+
+        const innerOffset =
+
             (
                 p *
-                2
+                3
             )
+
             *
+
             3;
 
 
-        const bottomVertexOffset =
+        const middleOffset =
+
             (
                 p *
-                2 +
+                3 +
                 1
             )
+
             *
+
             3;
 
 
-        // Top edge.
-        edgeArray[
-            topVertexOffset
+        const outerOffset =
+
+            (
+                p *
+                3 +
+                2
+            )
+
+            *
+
+            3;
+
+
+        // --------------------------------------------------
+        // INNER EDGE
+        //
+        // Exactly follows silk perimeter.
+        // --------------------------------------------------
+
+        bandArray[
+            innerOffset
         ] =
-            topArray[
-                sourceOffset
-            ];
+            tx;
 
 
-        edgeArray[
-            topVertexOffset + 1
+        bandArray[
+            innerOffset + 1
         ] =
-            topArray[
-                sourceOffset + 1
-            ];
+            ty;
 
 
-        edgeArray[
-            topVertexOffset + 2
+        bandArray[
+            innerOffset + 2
         ] =
-            topArray[
-                sourceOffset + 2
-            ];
+            tz;
 
 
-        // Inset lower edge.
-        edgeArray[
-            bottomVertexOffset
+        // --------------------------------------------------
+        // MIDDLE BEVEL
+        // --------------------------------------------------
+
+        bandArray[
+            middleOffset
         ] =
-            bottomArray[
-                sourceOffset
-            ];
+
+            tx
+
+            +
+
+            outward.x *
+            EDGE_BAND_MID_OUTSET
+
+            -
+
+            nx *
+            EDGE_BAND_MID_DEPTH;
 
 
-        edgeArray[
-            bottomVertexOffset + 1
+        bandArray[
+            middleOffset + 1
         ] =
-            bottomArray[
-                sourceOffset + 1
-            ];
+
+            ty
+
+            +
+
+            outward.y *
+            EDGE_BAND_MID_OUTSET
+
+            -
+
+            ny *
+            EDGE_BAND_MID_DEPTH;
 
 
-        edgeArray[
-            bottomVertexOffset + 2
+        bandArray[
+            middleOffset + 2
         ] =
-            bottomArray[
-                sourceOffset + 2
-            ];
+
+            tz
+
+            -
+
+            nz *
+            EDGE_BAND_MID_DEPTH;
+
+
+        // --------------------------------------------------
+        // OUTER EDGE
+        // --------------------------------------------------
+
+        bandArray[
+            outerOffset
+        ] =
+
+            tx
+
+            +
+
+            outward.x *
+            EDGE_BAND_OUTSET
+
+            -
+
+            nx *
+            EDGE_BAND_DEPTH;
+
+
+        bandArray[
+            outerOffset + 1
+        ] =
+
+            ty
+
+            +
+
+            outward.y *
+            EDGE_BAND_OUTSET
+
+            -
+
+            ny *
+            EDGE_BAND_DEPTH;
+
+
+        bandArray[
+            outerOffset + 2
+        ] =
+
+            tz
+
+            -
+
+            nz *
+            EDGE_BAND_DEPTH;
 
     }
 
 
-    edgePositions.needsUpdate =
+    edgeBandPositions.needsUpdate =
         true;
 
 
-    edgeGeometry.computeVertexNormals();
+    edgeBandGeometry.computeVertexNormals();
 
 }
 
@@ -3845,7 +4009,9 @@ function updateGeometry() {
         lerp(
 
             MIN_FOLD_AMPLITUDE,
+
             MAX_FOLD_AMPLITUDE,
+
             speed01
 
         )
@@ -3860,7 +4026,9 @@ function updateGeometry() {
         lerp(
 
             MIN_FOLD_LENGTH,
+
             MAX_FOLD_LENGTH,
+
             speed01
 
         );
@@ -3871,7 +4039,9 @@ function updateGeometry() {
         lerp(
 
             MIN_FOLD_WIDTH,
+
             MAX_FOLD_WIDTH,
+
             speed01
 
         );
@@ -3882,7 +4052,9 @@ function updateGeometry() {
         lerp(
 
             MIN_DRAG_AMOUNT,
+
             MAX_DRAG_AMOUNT,
+
             speed01
 
         )
@@ -3903,9 +4075,13 @@ function updateGeometry() {
 
 
     for (
+
         let i = 0;
+
         i < positions.count;
+
         i++
+
     ) {
 
         const baseX =
@@ -3930,7 +4106,10 @@ function updateGeometry() {
 
         const edgeDistanceX =
 
-            halfWidth -
+            halfWidth
+
+            -
+
             Math.abs(
                 baseX
             );
@@ -3938,17 +4117,25 @@ function updateGeometry() {
 
         const edgeDistanceY =
 
-            halfHeight -
+            halfHeight
+
+            -
+
             Math.abs(
                 baseY
             );
 
 
         // --------------------------------------------------
-        // ORIGINAL INTERIOR EDGE FADE
+        // ORIGINAL STABLE EDGE FADE
+        //
+        // The procedural fold dies away before the actual
+        // perimeter.
+        //
+        // No more edge flipping.
         // --------------------------------------------------
 
-        const interiorEdgeFade =
+        const edgeFade =
 
             smoothstep01(
 
@@ -3965,42 +4152,10 @@ function updateGeometry() {
             );
 
 
-        // --------------------------------------------------
-        // NEW:
-        // FOLDS CAN NOW REACH THE PERIMETER SLIGHTLY
-        // --------------------------------------------------
-
-        const foldEdgeFlex =
-
-            lerp(
-
-                EDGE_FOLD_MINIMUM,
-
-                1.0,
-
-                interiorEdgeFade
-
-            );
-
-
-        // Keep sideways drag much weaker at the border so
-        // the overall rectangle stays visually controlled.
-        const dragEdgeFlex =
-
-            lerp(
-
-                EDGE_DRAG_MINIMUM,
-
-                1.0,
-
-                interiorEdgeFade
-
-            );
-
-
         if (
 
             interactionPresence >
+
             0.001
 
         ) {
@@ -4143,13 +4298,13 @@ function updateGeometry() {
                 combinedFold *
                 foldAmplitude *
                 envelope *
-                foldEdgeFlex;
+                edgeFade;
 
 
             const dragEnvelope =
 
                 envelope *
-                dragEdgeFlex;
+                edgeFade;
 
 
             finalX +=
@@ -4189,16 +4344,16 @@ function updateGeometry() {
         true;
 
 
-    // Real moving normals.
+    // Lighting follows the moving folds.
     geometry.computeVertexNormals();
 
 
-    // Concave valley darkening.
+    // Darken concave valleys.
     updateDynamicOcclusion();
 
 
-    // Underside + beveled edge follow the exact top geometry.
-    updateThicknessGeometry();
+    // Keep permanent woven edge attached to the rug.
+    updateWovenEdgeBand();
 
 }
 
@@ -4237,9 +4392,11 @@ async function createRug() {
         new THREE.PlaneGeometry(
 
             RUG_WIDTH,
+
             RUG_HEIGHT,
 
             SEGMENTS_X,
+
             SEGMENTS_Y
 
         );
@@ -4294,7 +4451,7 @@ async function createRug() {
 
 
     // ------------------------------------------------------
-    // TOP SILK
+    // TOP SILK MATERIAL
     // ------------------------------------------------------
 
     const material =
@@ -4375,8 +4532,16 @@ async function createRug() {
                 true,
 
 
+            // ------------------------------------------------
+            // IMPORTANT CHANGE:
+            //
+            // DoubleSide means if a very steep local fold
+            // turns away from the camera, it still shows the
+            // silk surface instead of exposing a dark back.
+            // ------------------------------------------------
+
             side:
-                THREE.FrontSide
+                THREE.DoubleSide
 
         });
 
@@ -4403,8 +4568,6 @@ async function createRug() {
         true;
 
 
-    // Dynamic cloth extends slightly beyond original static
-    // bounds, so avoid aggressive frustum decisions.
     rug.frustumCulled =
         false;
 
@@ -4415,17 +4578,17 @@ async function createRug() {
 
 
     // ------------------------------------------------------
-    // INITIALIZE TOP CLOTH
+    // INITIALIZE CLOTH
     // ------------------------------------------------------
 
     initializeClothPhysics();
 
 
     // ------------------------------------------------------
-    // CREATE UNDERSIDE + BEVELED PERIMETER
+    // PERMANENT WOVEN BORDER
     // ------------------------------------------------------
 
-    createThicknessShell();
+    createWovenEdgeBand();
 
 
     // ------------------------------------------------------
@@ -4457,30 +4620,34 @@ async function createRug() {
     };
 
 
-    window.porphyraThickness = {
+    window.porphyraEdge = {
 
-        undersideMesh,
+        mesh:
+            edgeBandMesh,
 
-        edgeMesh,
+        outset:
+            EDGE_BAND_OUTSET,
 
-        thickness:
-            RUG_THICKNESS,
-
-        bevel:
-            EDGE_BEVEL_INSET
+        depth:
+            EDGE_BAND_DEPTH
 
     };
 
 
     console.log(
-        'PORPHYRA Cloth v11.2b — VISIBLE BEVELED THICKNESS LOADED'
+        'PORPHYRA Cloth v11.2c — PERMANENT WOVEN EDGE LOADED'
     );
 
 }
 
 
 // ==========================================================
-// CAMERA FIT — v11.2b
+// CAMERA FIT
+// ==========================================================
+//
+// Straight-on camera restored.
+//
+// The woven edge does NOT depend on camera angle anymore.
 // ==========================================================
 
 function fitCamera() {
@@ -4488,6 +4655,7 @@ function fitCamera() {
     camera.aspect =
 
         window.innerWidth /
+
         window.innerHeight;
 
 
@@ -4548,23 +4716,14 @@ function fitCamera() {
         );
 
 
-    // ------------------------------------------------------
-    // IMPORTANT:
-    //
-    // Not a dramatic angled product shot.
-    //
-    // Just enough off-axis movement to expose the beveled
-    // perimeter and underside.
-    // ------------------------------------------------------
-
     camera.position.set(
 
-        CAMERA_X_OFFSET,
+        0,
 
-        CAMERA_Y_OFFSET,
+        0,
 
         distance *
-        CAMERA_DISTANCE_MULT
+        1.12
 
     );
 
@@ -4649,7 +4808,7 @@ try {
 
 
     console.log(
-        'PORPHYRA Cloth v11.2b loaded'
+        'PORPHYRA Cloth v11.2c loaded'
     );
 
 }
