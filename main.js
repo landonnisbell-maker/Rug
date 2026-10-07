@@ -7,21 +7,28 @@ import {
 
 // ==========================================================
 // PORPHYRA
-// INTERACTIVE CLOTH — VERSION 8.2
+// INTERACTIVE CLOTH — VERSION 8.4
 //
-// RGB MASK CHANNEL DIAGNOSTIC
+// FINAL BLENDKIT MATERIAL RECONSTRUCTION
 //
-// LEFT THIRD   = RED channel
-// CENTER THIRD = GREEN channel
-// RIGHT THIRD  = BLUE channel
+// Preserves:
+// - v7 responsive cloth physics
+// - ripple simulation
+// - directional folding
+// - lateral bunching
 //
-// Cloth physics/folding from v7 are preserved.
+// Adds:
+// - Blender-style base color processing
+// - RED mask → metallic
+// - GREEN mask → base-color multiply
+// - BLUE mask → roughness
+// - Blender normal strength 0.8
 // ==========================================================
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // RUG
-// ----------------------------------------------------------
+// ==========================================================
 
 const RUG_WIDTH = 9.4;
 const RUG_HEIGHT = 5.3;
@@ -33,9 +40,9 @@ const COLS = SEGMENTS_X + 1;
 const ROWS = SEGMENTS_Y + 1;
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // TEXTURE SCALE
-// ----------------------------------------------------------
+// ==========================================================
 
 const REPEAT_Y = 1.6;
 
@@ -44,9 +51,9 @@ const REPEAT_X =
     (RUG_WIDTH / RUG_HEIGHT);
 
 
-// ----------------------------------------------------------
-// MAIN CLOTH PHYSICS
-// ----------------------------------------------------------
+// ==========================================================
+// CLOTH PHYSICS
+// ==========================================================
 
 const TENSION = 0.26;
 
@@ -55,9 +62,9 @@ const RESTORE_FORCE = 0.035;
 const DAMPING = 0.92;
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // POINTER TRACKING
-// ----------------------------------------------------------
+// ==========================================================
 
 const POINTER_FOLLOW_SPEED = 38;
 
@@ -68,18 +75,18 @@ const DIRECTION_UPDATE_THRESHOLD = 0.28;
 const DIRECTION_FOLLOW_SPEED = 10;
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // SPEED RESPONSE
-// ----------------------------------------------------------
+// ==========================================================
 
 const SPEED_DEADZONE = 0.12;
 
 const SPEED_FULL_EFFECT = 5.0;
 
 
-// ----------------------------------------------------------
-// SLOW-MOUSE RESPONSE
-// ----------------------------------------------------------
+// ==========================================================
+// SLOW MOUSE
+// ==========================================================
 
 const MIN_BULGE = 0.045;
 
@@ -88,9 +95,9 @@ const MIN_RADIUS = 0.55;
 const MIN_POINTER_STIFFNESS = 0.070;
 
 
-// ----------------------------------------------------------
-// FAST-MOUSE RESPONSE
-// ----------------------------------------------------------
+// ==========================================================
+// FAST MOUSE
+// ==========================================================
 
 const MAX_BULGE = 0.58;
 
@@ -99,18 +106,18 @@ const MAX_RADIUS = 0.92;
 const MAX_POINTER_STIFFNESS = 0.17;
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // LOCAL DAMPING
-// ----------------------------------------------------------
+// ==========================================================
 
 const SLOW_POINTER_DAMPING = 0.55;
 
 const FAST_POINTER_DAMPING = 0.16;
 
 
-// ----------------------------------------------------------
-// CLOTH FOLD SETTINGS
-// ----------------------------------------------------------
+// ==========================================================
+// DIRECTIONAL FOLDS
+// ==========================================================
 
 const MIN_FOLD_AMPLITUDE = 0.007;
 
@@ -129,18 +136,18 @@ const FOLD_FREQUENCY_1 = 7.0;
 const FOLD_FREQUENCY_2 = 4.2;
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // LATERAL FABRIC DRAG
-// ----------------------------------------------------------
+// ==========================================================
 
 const MIN_DRAG_AMOUNT = 0.002;
 
 const MAX_DRAG_AMOUNT = 0.060;
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // FIXED PHYSICS TIMESTEP
-// ----------------------------------------------------------
+// ==========================================================
 
 const FIXED_TIMESTEP = 1 / 120;
 
@@ -149,9 +156,9 @@ const MAX_SUBSTEPS = 5;
 let physicsAccumulator = 0;
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // SCENE
-// ----------------------------------------------------------
+// ==========================================================
 
 const scene =
     new THREE.Scene();
@@ -160,9 +167,9 @@ scene.background =
     new THREE.Color(0x000000);
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // CAMERA
-// ----------------------------------------------------------
+// ==========================================================
 
 const camera =
     new THREE.PerspectiveCamera(
@@ -173,9 +180,9 @@ const camera =
     );
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // RENDERER
-// ----------------------------------------------------------
+// ==========================================================
 
 const renderer =
     new THREE.WebGLRenderer({
@@ -209,9 +216,9 @@ document.body.appendChild(
 );
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // ENVIRONMENT
-// ----------------------------------------------------------
+// ==========================================================
 
 const pmrem =
     new THREE.PMREMGenerator(
@@ -235,15 +242,9 @@ room.dispose();
 pmrem.dispose();
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // LIGHTING
-//
-// These lights will NOT affect the diagnostic material,
-// because ShaderMaterial ignores them.
-//
-// They are left here so the rest of the project remains
-// unchanged.
-// ----------------------------------------------------------
+// ==========================================================
 
 const keyLight =
     new THREE.DirectionalLight(
@@ -279,9 +280,9 @@ scene.add(
 );
 
 
-// ----------------------------------------------------------
-// TEXTURES
-// ----------------------------------------------------------
+// ==========================================================
+// TEXTURE LOADING
+// ==========================================================
 
 const textureLoader =
     new THREE.TextureLoader();
@@ -328,9 +329,9 @@ function configureTexture(texture) {
 }
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // CLOTH DATA
-// ----------------------------------------------------------
+// ==========================================================
 
 let rug;
 
@@ -351,9 +352,9 @@ let restY;
 let restZ;
 
 
-// ----------------------------------------------------------
-// GRID INDEX
-// ----------------------------------------------------------
+// ==========================================================
+// HELPERS
+// ==========================================================
 
 function indexOf(x, y) {
 
@@ -364,10 +365,6 @@ function indexOf(x, y) {
 
 }
 
-
-// ----------------------------------------------------------
-// HELPERS
-// ----------------------------------------------------------
 
 function clamp01(value) {
 
@@ -409,9 +406,653 @@ function smoothstep01(t) {
 }
 
 
-// ----------------------------------------------------------
+// ==========================================================
+// COLOR-SPACE HELPERS
+// ==========================================================
+//
+// Blender converts an sRGB color texture into linear
+// working space before material math.
+//
+// So we:
+//
+// sRGB PNG
+// → linear
+// → Value 1.3
+// → multiply GREEN mask
+// → back to sRGB PNG-style texture
+//
+// ==========================================================
+
+function srgbToLinear(value) {
+
+    value =
+        value / 255;
+
+    if (
+        value <= 0.04045
+    ) {
+
+        return (
+            value / 12.92
+        );
+
+    }
+
+    return Math.pow(
+        (
+            value + 0.055
+        )
+        /
+        1.055,
+        2.4
+    );
+
+}
+
+
+function linearToSrgb(value) {
+
+    value =
+        clamp01(value);
+
+    let srgb;
+
+    if (
+        value <= 0.0031308
+    ) {
+
+        srgb =
+            value * 12.92;
+
+    }
+    else {
+
+        srgb =
+            1.055 *
+            Math.pow(
+                value,
+                1 / 2.4
+            )
+            -
+            0.055;
+
+    }
+
+    return Math.round(
+        clamp01(srgb) *
+        255
+    );
+
+}
+
+
+// ==========================================================
+// CREATE PROCESSED BLENDKIT MAPS
+// ==========================================================
+//
+// Input:
+//
+// rug_basecolor.png
+// rug_mask.png
+//
+// Output:
+//
+// 1. processedColorTexture
+//
+//    Base Color
+//    → Value ×1.3
+//    → multiply GREEN mask
+//
+//
+// 2. metalnessTexture
+//
+//    RED mask
+//    → black at 0
+//    → white at 0.340
+//
+//
+// 3. roughnessTexture
+//
+//    BLUE mask
+//    → black at 0
+//    → white at 0.051
+//
+// ==========================================================
+
+function createBlendKitMaps(
+    baseTexture,
+    maskTexture
+) {
+
+    const baseImage =
+        baseTexture.image;
+
+    const maskImage =
+        maskTexture.image;
+
+
+    const width =
+        baseImage.width;
+
+    const height =
+        baseImage.height;
+
+
+    // ------------------------------------------------------
+    // BASE CANVAS
+    // ------------------------------------------------------
+
+    const baseCanvas =
+        document.createElement(
+            'canvas'
+        );
+
+    baseCanvas.width =
+        width;
+
+    baseCanvas.height =
+        height;
+
+
+    const baseContext =
+        baseCanvas.getContext(
+            '2d',
+            {
+                willReadFrequently:
+                    true
+            }
+        );
+
+
+    baseContext.drawImage(
+        baseImage,
+        0,
+        0,
+        width,
+        height
+    );
+
+
+    const baseData =
+        baseContext.getImageData(
+            0,
+            0,
+            width,
+            height
+        );
+
+
+    // ------------------------------------------------------
+    // MASK CANVAS
+    //
+    // Drawing to the exact same dimensions guarantees the
+    // base texture and mask line up pixel-for-pixel.
+    // ------------------------------------------------------
+
+    const maskCanvas =
+        document.createElement(
+            'canvas'
+        );
+
+    maskCanvas.width =
+        width;
+
+    maskCanvas.height =
+        height;
+
+
+    const maskContext =
+        maskCanvas.getContext(
+            '2d',
+            {
+                willReadFrequently:
+                    true
+            }
+        );
+
+
+    maskContext.drawImage(
+        maskImage,
+        0,
+        0,
+        width,
+        height
+    );
+
+
+    const maskData =
+        maskContext.getImageData(
+            0,
+            0,
+            width,
+            height
+        );
+
+
+    // ------------------------------------------------------
+    // OUTPUT CANVASES
+    // ------------------------------------------------------
+
+    const colorCanvas =
+        document.createElement(
+            'canvas'
+        );
+
+    colorCanvas.width =
+        width;
+
+    colorCanvas.height =
+        height;
+
+
+    const metalCanvas =
+        document.createElement(
+            'canvas'
+        );
+
+    metalCanvas.width =
+        width;
+
+    metalCanvas.height =
+        height;
+
+
+    const roughCanvas =
+        document.createElement(
+            'canvas'
+        );
+
+    roughCanvas.width =
+        width;
+
+    roughCanvas.height =
+        height;
+
+
+    const colorContext =
+        colorCanvas.getContext(
+            '2d'
+        );
+
+    const metalContext =
+        metalCanvas.getContext(
+            '2d'
+        );
+
+    const roughContext =
+        roughCanvas.getContext(
+            '2d'
+        );
+
+
+    const colorOutput =
+        colorContext.createImageData(
+            width,
+            height
+        );
+
+    const metalOutput =
+        metalContext.createImageData(
+            width,
+            height
+        );
+
+    const roughOutput =
+        roughContext.createImageData(
+            width,
+            height
+        );
+
+
+    const basePixels =
+        baseData.data;
+
+    const maskPixels =
+        maskData.data;
+
+    const colorPixels =
+        colorOutput.data;
+
+    const metalPixels =
+        metalOutput.data;
+
+    const roughPixels =
+        roughOutput.data;
+
+
+    // Diagnostics.
+    let redMin = 1;
+    let redMax = 0;
+
+    let greenMin = 1;
+    let greenMax = 0;
+
+    let blueMin = 1;
+    let blueMax = 0;
+
+
+    // ------------------------------------------------------
+    // PROCESS EVERY PIXEL
+    // ------------------------------------------------------
+
+    for (
+        let i = 0;
+        i < basePixels.length;
+        i += 4
+    ) {
+
+        // --------------------------------------------------
+        // MASK CHANNELS
+        // --------------------------------------------------
+
+        const maskRed =
+            maskPixels[i] /
+            255;
+
+        const maskGreen =
+            maskPixels[i + 1] /
+            255;
+
+        const maskBlue =
+            maskPixels[i + 2] /
+            255;
+
+
+        redMin =
+            Math.min(
+                redMin,
+                maskRed
+            );
+
+        redMax =
+            Math.max(
+                redMax,
+                maskRed
+            );
+
+
+        greenMin =
+            Math.min(
+                greenMin,
+                maskGreen
+            );
+
+        greenMax =
+            Math.max(
+                greenMax,
+                maskGreen
+            );
+
+
+        blueMin =
+            Math.min(
+                blueMin,
+                maskBlue
+            );
+
+        blueMax =
+            Math.max(
+                blueMax,
+                maskBlue
+            );
+
+
+        // --------------------------------------------------
+        // BASE COLOR
+        //
+        // Blender:
+        //
+        // sRGB image
+        // → working linear space
+        // → Value = 1.300
+        // → multiply GREEN mask
+        // --------------------------------------------------
+
+        let linearR =
+            srgbToLinear(
+                basePixels[i]
+            );
+
+        let linearG =
+            srgbToLinear(
+                basePixels[i + 1]
+            );
+
+        let linearB =
+            srgbToLinear(
+                basePixels[i + 2]
+            );
+
+
+        linearR *=
+            1.3;
+
+        linearG *=
+            1.3;
+
+        linearB *=
+            1.3;
+
+
+        linearR *=
+            maskGreen;
+
+        linearG *=
+            maskGreen;
+
+        linearB *=
+            maskGreen;
+
+
+        colorPixels[i] =
+            linearToSrgb(
+                linearR
+            );
+
+        colorPixels[i + 1] =
+            linearToSrgb(
+                linearG
+            );
+
+        colorPixels[i + 2] =
+            linearToSrgb(
+                linearB
+            );
+
+        colorPixels[i + 3] =
+            255;
+
+
+        // --------------------------------------------------
+        // METALLIC
+        //
+        // Blender ColorRamp:
+        //
+        // BLACK @ 0.000
+        // WHITE @ 0.340
+        //
+        // --------------------------------------------------
+
+        const metallic =
+            clamp01(
+                maskRed /
+                0.340
+            );
+
+
+        const metallicByte =
+            Math.round(
+                metallic *
+                255
+            );
+
+
+        metalPixels[i] =
+            metallicByte;
+
+        metalPixels[i + 1] =
+            metallicByte;
+
+        metalPixels[i + 2] =
+            metallicByte;
+
+        metalPixels[i + 3] =
+            255;
+
+
+        // --------------------------------------------------
+        // ROUGHNESS
+        //
+        // Blender ColorRamp:
+        //
+        // BLACK @ 0.000
+        // WHITE @ 0.051
+        //
+        // --------------------------------------------------
+
+        const roughness =
+            clamp01(
+                maskBlue /
+                0.051
+            );
+
+
+        const roughnessByte =
+            Math.round(
+                roughness *
+                255
+            );
+
+
+        roughPixels[i] =
+            roughnessByte;
+
+        roughPixels[i + 1] =
+            roughnessByte;
+
+        roughPixels[i + 2] =
+            roughnessByte;
+
+        roughPixels[i + 3] =
+            255;
+
+    }
+
+
+    // ------------------------------------------------------
+    // WRITE OUTPUT
+    // ------------------------------------------------------
+
+    colorContext.putImageData(
+        colorOutput,
+        0,
+        0
+    );
+
+
+    metalContext.putImageData(
+        metalOutput,
+        0,
+        0
+    );
+
+
+    roughContext.putImageData(
+        roughOutput,
+        0,
+        0
+    );
+
+
+    // ------------------------------------------------------
+    // THREE.JS TEXTURES
+    // ------------------------------------------------------
+
+    const processedColorTexture =
+        new THREE.CanvasTexture(
+            colorCanvas
+        );
+
+
+    processedColorTexture.colorSpace =
+        THREE.SRGBColorSpace;
+
+
+    const metalnessTexture =
+        new THREE.CanvasTexture(
+            metalCanvas
+        );
+
+
+    metalnessTexture.colorSpace =
+        THREE.NoColorSpace;
+
+
+    const roughnessTexture =
+        new THREE.CanvasTexture(
+            roughCanvas
+        );
+
+
+    roughnessTexture.colorSpace =
+        THREE.NoColorSpace;
+
+
+    configureTexture(
+        processedColorTexture
+    );
+
+
+    configureTexture(
+        metalnessTexture
+    );
+
+
+    configureTexture(
+        roughnessTexture
+    );
+
+
+    console.log(
+        'PORPHYRA v8.4 mask ranges:',
+        {
+            red: [
+                redMin,
+                redMax
+            ],
+
+            green: [
+                greenMin,
+                greenMax
+            ],
+
+            blue: [
+                blueMin,
+                blueMax
+            ]
+        }
+    );
+
+
+    return {
+
+        color:
+            processedColorTexture,
+
+        metalness:
+            metalnessTexture,
+
+        roughness:
+            roughnessTexture
+
+    };
+
+}
+
+
+// ==========================================================
 // STATIC RESTING CLOTH
-// ----------------------------------------------------------
+// ==========================================================
 
 function restingHeight(x, y) {
 
@@ -445,9 +1086,9 @@ function restingHeight(x, y) {
 }
 
 
-// ----------------------------------------------------------
-// INITIALIZE CLOTH
-// ----------------------------------------------------------
+// ==========================================================
+// INITIALIZE CLOTH PHYSICS
+// ==========================================================
 
 function initializeClothPhysics() {
 
@@ -460,22 +1101,34 @@ function initializeClothPhysics() {
 
 
     height =
-        new Float32Array(count);
+        new Float32Array(
+            count
+        );
 
     velocity =
-        new Float32Array(count);
+        new Float32Array(
+            count
+        );
 
     acceleration =
-        new Float32Array(count);
+        new Float32Array(
+            count
+        );
 
     restX =
-        new Float32Array(count);
+        new Float32Array(
+            count
+        );
 
     restY =
-        new Float32Array(count);
+        new Float32Array(
+            count
+        );
 
     restZ =
-        new Float32Array(count);
+        new Float32Array(
+            count
+        );
 
 
     for (
@@ -491,9 +1144,11 @@ function initializeClothPhysics() {
             positions.getY(i);
 
 
-        restX[i] = x;
+        restX[i] =
+            x;
 
-        restY[i] = y;
+        restY[i] =
+            y;
 
 
         const z =
@@ -503,7 +1158,8 @@ function initializeClothPhysics() {
             );
 
 
-        restZ[i] = z;
+        restZ[i] =
+            z;
 
 
         positions.setZ(
@@ -523,9 +1179,9 @@ function initializeClothPhysics() {
 }
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // POINTER SYSTEM
-// ----------------------------------------------------------
+// ==========================================================
 
 const pointerNDC =
     new THREE.Vector2();
@@ -554,46 +1210,53 @@ let pointerActive =
     false;
 
 
-// Real browser cursor.
-let targetPointerX = 0;
+let targetPointerX =
+    0;
 
-let targetPointerY = 0;
-
-
-// Smoothed physics cursor.
-let smoothPointerX = 0;
-
-let smoothPointerY = 0;
+let targetPointerY =
+    0;
 
 
-// Previous smoothed cursor.
-let previousSmoothPointerX = 0;
+let smoothPointerX =
+    0;
 
-let previousSmoothPointerY = 0;
-
-
-// Smoothed speed.
-let smoothPointerSpeed = 0;
+let smoothPointerY =
+    0;
 
 
-// Smoothed direction.
-let motionDirX = 1;
+let previousSmoothPointerX =
+    0;
 
-let motionDirY = 0;
+let previousSmoothPointerY =
+    0;
+
+
+let smoothPointerSpeed =
+    0;
+
+
+let motionDirX =
+    1;
+
+let motionDirY =
+    0;
 
 
 let hasSmoothPointer =
     false;
 
 
-let interactionPresence = 0;
+let interactionPresence =
+    0;
 
-let visualSpeed01 = 0;
+
+let visualSpeed01 =
+    0;
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // POINTER MOVE
-// ----------------------------------------------------------
+// ==========================================================
 
 function onPointerMove(event) {
 
@@ -715,9 +1378,9 @@ function onPointerMove(event) {
 }
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // POINTER LEAVE
-// ----------------------------------------------------------
+// ==========================================================
 
 function onPointerLeave() {
 
@@ -747,9 +1410,9 @@ renderer.domElement.addEventListener(
 );
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // SMOOTH POINTER
-// ----------------------------------------------------------
+// ==========================================================
 
 function updateSmoothPointer(dt) {
 
@@ -795,7 +1458,7 @@ function updateSmoothPointer(dt) {
 
 
     // ------------------------------------------------------
-    // POSITION
+    // POSITION FOLLOW
     // ------------------------------------------------------
 
     const follow =
@@ -858,9 +1521,7 @@ function updateSmoothPointer(dt) {
         Math.sqrt(
             instantaneousVX *
             instantaneousVX
-
             +
-
             instantaneousVY *
             instantaneousVY
         );
@@ -944,9 +1605,7 @@ function updateSmoothPointer(dt) {
             Math.sqrt(
                 motionDirX *
                 motionDirX
-
                 +
-
                 motionDirY *
                 motionDirY
             );
@@ -971,9 +1630,9 @@ function updateSmoothPointer(dt) {
 }
 
 
-// ----------------------------------------------------------
-// SPEED → INTERACTION
-// ----------------------------------------------------------
+// ==========================================================
+// SPEED → POINTER EFFECT
+// ==========================================================
 
 function getPointerEffect() {
 
@@ -1049,16 +1708,20 @@ function getPointerEffect() {
 }
 
 
-// ----------------------------------------------------------
-// PHYSICS
-// ----------------------------------------------------------
+// ==========================================================
+// CLOTH PHYSICS
+// ==========================================================
 
 function simulateCloth(dt) {
 
-    updateSmoothPointer(dt);
+    updateSmoothPointer(
+        dt
+    );
 
 
-    acceleration.fill(0);
+    acceleration.fill(
+        0
+    );
 
 
     const step =
@@ -1066,7 +1729,7 @@ function simulateCloth(dt) {
 
 
     // ------------------------------------------------------
-    // RIPPLE / NEIGHBOR SPRINGS
+    // RIPPLE SPRINGS
     // ------------------------------------------------------
 
     for (
@@ -1300,7 +1963,7 @@ function simulateCloth(dt) {
 
 
     // ------------------------------------------------------
-    // PIN BORDERS
+    // PIN EDGES
     // ------------------------------------------------------
 
     for (
@@ -1323,14 +1986,18 @@ function simulateCloth(dt) {
             );
 
 
-        height[bottom] = 0;
+        height[bottom] =
+            0;
 
-        velocity[bottom] = 0;
+        velocity[bottom] =
+            0;
 
 
-        height[top] = 0;
+        height[top] =
+            0;
 
-        velocity[top] = 0;
+        velocity[top] =
+            0;
 
     }
 
@@ -1355,23 +2022,27 @@ function simulateCloth(dt) {
             );
 
 
-        height[left] = 0;
+        height[left] =
+            0;
 
-        velocity[left] = 0;
+        velocity[left] =
+            0;
 
 
-        height[right] = 0;
+        height[right] =
+            0;
 
-        velocity[right] = 0;
+        velocity[right] =
+            0;
 
     }
 
 }
 
 
-// ----------------------------------------------------------
-// UPDATE VISUAL CLOTH GEOMETRY
-// ----------------------------------------------------------
+// ==========================================================
+// UPDATE VISUAL CLOTH
+// ==========================================================
 
 function updateGeometry() {
 
@@ -1455,12 +2126,16 @@ function updateGeometry() {
 
         const edgeDistanceX =
             halfWidth -
-            Math.abs(baseX);
+            Math.abs(
+                baseX
+            );
 
 
         const edgeDistanceY =
             halfHeight -
-            Math.abs(baseY);
+            Math.abs(
+                baseY
+            );
 
 
         const edgeFade =
@@ -1490,18 +2165,20 @@ function updateGeometry() {
                 smoothPointerY;
 
 
-            // ------------------------------------------------
-            // ROTATE INTO CURSOR-MOTION SPACE
-            // ------------------------------------------------
-
             const along =
-                dx * motionDirX +
-                dy * motionDirY;
+                dx *
+                motionDirX
+                +
+                dy *
+                motionDirY;
 
 
             const across =
-                -dx * motionDirY +
-                dy * motionDirX;
+                -dx *
+                motionDirY
+                +
+                dy *
+                motionDirX;
 
 
             const directionalLength =
@@ -1509,10 +2186,6 @@ function updateGeometry() {
                     ? foldLength * 1.25
                     : foldLength * 0.78;
 
-
-            // ------------------------------------------------
-            // ELLIPTICAL FOLD REGION
-            // ------------------------------------------------
 
             const envelope =
                 Math.exp(
@@ -1544,46 +2217,35 @@ function updateGeometry() {
                 );
 
 
-            // ------------------------------------------------
-            // PRIMARY FOLDS
-            // ------------------------------------------------
-
             const fold1 =
                 Math.sin(
                     across *
                     FOLD_FREQUENCY_1
-
                     +
-
                     along *
                     0.75
                 );
 
 
-            // ------------------------------------------------
-            // SECONDARY FOLDS
-            // ------------------------------------------------
-
             const fold2 =
                 Math.sin(
                     across *
                     FOLD_FREQUENCY_2
-
                     -
-
                     along *
                     1.35
-
                     +
-
                     0.85
                 );
 
 
             const combinedFold =
                 (
-                    fold1 * 0.68 +
-                    fold2 * 0.32
+                    fold1 *
+                    0.68
+                    +
+                    fold2 *
+                    0.32
                 );
 
 
@@ -1593,10 +2255,6 @@ function updateGeometry() {
                 envelope *
                 edgeFade;
 
-
-            // ------------------------------------------------
-            // LATERAL FABRIC DRAG
-            // ------------------------------------------------
 
             const dragEnvelope =
                 envelope *
@@ -1642,369 +2300,67 @@ function updateGeometry() {
 
 
 // ==========================================================
-// V8.3 SAFE MASK DIAGNOSTIC
-// ==========================================================
-//
-// This avoids custom GLSL entirely.
-//
-// It loads rug_mask.png into a normal HTML canvas,
-// then creates a new image:
-//
-// LEFT THIRD   = RED channel
-// CENTER THIRD = GREEN channel
-// RIGHT THIRD  = BLUE channel
-//
-// Each channel becomes grayscale.
-//
-// This is then used as a normal Three.js texture.
-// ==========================================================
-
-async function createMaskDiagnosticTexture() {
-
-    return new Promise(
-        (resolve, reject) => {
-
-            const image =
-                new Image();
-
-
-            image.onload =
-                () => {
-
-                    try {
-
-                        // ----------------------------------
-                        // SOURCE CANVAS
-                        // ----------------------------------
-
-                        const sourceCanvas =
-                            document.createElement(
-                                'canvas'
-                            );
-
-
-                        sourceCanvas.width =
-                            image.width;
-
-
-                        sourceCanvas.height =
-                            image.height;
-
-
-                        const sourceContext =
-                            sourceCanvas.getContext(
-                                '2d',
-                                {
-                                    willReadFrequently:
-                                        true
-                                }
-                            );
-
-
-                        sourceContext.drawImage(
-                            image,
-                            0,
-                            0
-                        );
-
-
-                        const sourceImage =
-                            sourceContext.getImageData(
-                                0,
-                                0,
-                                image.width,
-                                image.height
-                            );
-
-
-                        const sourcePixels =
-                            sourceImage.data;
-
-
-                        // ----------------------------------
-                        // OUTPUT CANVAS
-                        //
-                        // Three complete copies side by side:
-                        //
-                        // R | G | B
-                        // ----------------------------------
-
-                        const outputCanvas =
-                            document.createElement(
-                                'canvas'
-                            );
-
-
-                        outputCanvas.width =
-                            image.width * 3;
-
-
-                        outputCanvas.height =
-                            image.height;
-
-
-                        const outputContext =
-                            outputCanvas.getContext(
-                                '2d'
-                            );
-
-
-                        const outputImage =
-                            outputContext.createImageData(
-                                outputCanvas.width,
-                                outputCanvas.height
-                            );
-
-
-                        const outputPixels =
-                            outputImage.data;
-
-
-                        // ----------------------------------
-                        // BUILD EACH CHANNEL
-                        // ----------------------------------
-
-                        for (
-                            let y = 0;
-                            y < image.height;
-                            y++
-                        ) {
-
-                            for (
-                                let x = 0;
-                                x < image.width;
-                                x++
-                            ) {
-
-                                const sourceIndex =
-                                    (
-                                        y *
-                                        image.width +
-                                        x
-                                    ) * 4;
-
-
-                                const red =
-                                    sourcePixels[
-                                        sourceIndex
-                                    ];
-
-
-                                const green =
-                                    sourcePixels[
-                                        sourceIndex + 1
-                                    ];
-
-
-                                const blue =
-                                    sourcePixels[
-                                        sourceIndex + 2
-                                    ];
-
-
-                                // --------------------------
-                                // RED PANEL
-                                // --------------------------
-
-                                let outputX =
-                                    x;
-
-
-                                let outputIndex =
-                                    (
-                                        y *
-                                        outputCanvas.width +
-                                        outputX
-                                    ) * 4;
-
-
-                                outputPixels[
-                                    outputIndex
-                                ] = red;
-
-
-                                outputPixels[
-                                    outputIndex + 1
-                                ] = red;
-
-
-                                outputPixels[
-                                    outputIndex + 2
-                                ] = red;
-
-
-                                outputPixels[
-                                    outputIndex + 3
-                                ] = 255;
-
-
-                                // --------------------------
-                                // GREEN PANEL
-                                // --------------------------
-
-                                outputX =
-                                    x +
-                                    image.width;
-
-
-                                outputIndex =
-                                    (
-                                        y *
-                                        outputCanvas.width +
-                                        outputX
-                                    ) * 4;
-
-
-                                outputPixels[
-                                    outputIndex
-                                ] = green;
-
-
-                                outputPixels[
-                                    outputIndex + 1
-                                ] = green;
-
-
-                                outputPixels[
-                                    outputIndex + 2
-                                ] = green;
-
-
-                                outputPixels[
-                                    outputIndex + 3
-                                ] = 255;
-
-
-                                // --------------------------
-                                // BLUE PANEL
-                                // --------------------------
-
-                                outputX =
-                                    x +
-                                    image.width * 2;
-
-
-                                outputIndex =
-                                    (
-                                        y *
-                                        outputCanvas.width +
-                                        outputX
-                                    ) * 4;
-
-
-                                outputPixels[
-                                    outputIndex
-                                ] = blue;
-
-
-                                outputPixels[
-                                    outputIndex + 1
-                                ] = blue;
-
-
-                                outputPixels[
-                                    outputIndex + 2
-                                ] = blue;
-
-
-                                outputPixels[
-                                    outputIndex + 3
-                                ] = 255;
-
-                            }
-
-                        }
-
-
-                        outputContext.putImageData(
-                            outputImage,
-                            0,
-                            0
-                        );
-
-
-                        // ----------------------------------
-                        // THREE.JS TEXTURE
-                        // ----------------------------------
-
-                        const diagnosticTexture =
-                            new THREE.CanvasTexture(
-                                outputCanvas
-                            );
-
-
-                        diagnosticTexture.colorSpace =
-                            THREE.SRGBColorSpace;
-
-
-                        diagnosticTexture.wrapS =
-                            THREE.ClampToEdgeWrapping;
-
-
-                        diagnosticTexture.wrapT =
-                            THREE.ClampToEdgeWrapping;
-
-
-                        diagnosticTexture.minFilter =
-                            THREE.LinearFilter;
-
-
-                        diagnosticTexture.magFilter =
-                            THREE.LinearFilter;
-
-
-                        diagnosticTexture.anisotropy =
-                            renderer.capabilities
-                                .getMaxAnisotropy();
-
-
-                        diagnosticTexture.needsUpdate =
-                            true;
-
-
-                        resolve(
-                            diagnosticTexture
-                        );
-
-                    }
-                    catch (error) {
-
-                        reject(error);
-
-                    }
-
-                };
-
-
-            image.onerror =
-                () => {
-
-                    reject(
-                        new Error(
-                            'Could not load ./textures/rug_mask.png'
-                        )
-                    );
-
-                };
-
-
-            image.src =
-                './textures/rug_mask.png';
-
-        }
-    );
-
-}
-
-
-// ==========================================================
-// CREATE RUG — V8.3 SAFE RGB TEST
+// CREATE RUG — V8.4
 // ==========================================================
 
 async function createRug() {
 
-    const diagnosticTexture =
-        await createMaskDiagnosticTexture();
+    const [
+        baseTexture,
+        maskTexture,
+        normalTexture
+    ] =
+        await Promise.all([
+
+            loadTexture(
+                './textures/rug_basecolor.png'
+            ),
+
+            loadTexture(
+                './textures/rug_mask.png'
+            ),
+
+            loadTexture(
+                './textures/rug_normal.png'
+            )
+
+        ]);
+
+
+    // ------------------------------------------------------
+    // SOURCE TEXTURE COLOR SPACES
+    // ------------------------------------------------------
+
+    baseTexture.colorSpace =
+        THREE.SRGBColorSpace;
+
+
+    maskTexture.colorSpace =
+        THREE.NoColorSpace;
+
+
+    normalTexture.colorSpace =
+        THREE.NoColorSpace;
+
+
+    // ------------------------------------------------------
+    // REBUILD BLENDER MATERIAL MAPS
+    // ------------------------------------------------------
+
+    const blendKitMaps =
+        createBlendKitMaps(
+            baseTexture,
+            maskTexture
+        );
+
+
+    // ------------------------------------------------------
+    // NORMAL MAP
+    // ------------------------------------------------------
+
+    configureTexture(
+        normalTexture
+    );
 
 
     // ------------------------------------------------------
@@ -2021,69 +2377,75 @@ async function createRug() {
 
 
     // ------------------------------------------------------
-    // MATERIAL
+    // PHYSICAL MATERIAL
+    // ------------------------------------------------------
     //
-    // Ordinary Three.js material.
-    // No custom shader.
-    // No lighting.
-    // No roughness.
-    // No metallic.
+    // IMPORTANT:
+    //
+    // No extra fake silk sheen yet.
+    //
+    // This stage is meant to reproduce the original
+    // Blender/BlendKit setup first.
+    //
     // ------------------------------------------------------
 
     const material =
-        new THREE.MeshBasicMaterial({
+        new THREE.MeshPhysicalMaterial({
 
             map:
-                diagnosticTexture,
+                blendKitMaps.color,
+
+
+            // Three.js multiplies metalnessMap by this.
+            metalness:
+                1.0,
+
+
+            metalnessMap:
+                blendKitMaps.metalness,
+
+
+            // Three.js multiplies roughnessMap by this.
+            roughness:
+                1.0,
+
+
+            roughnessMap:
+                blendKitMaps.roughness,
+
+
+            normalMap:
+                normalTexture,
+
+
+            // Blender normal strength = 0.800.
+            //
+            // Y is inverted because the original Blender
+            // material explicitly inverted that channel.
+            normalScale:
+                new THREE.Vector2(
+                    0.8,
+                    -0.8
+                ),
+
+
+            // Save silk-specific sheen for checklist #2.
+            sheen:
+                0,
+
+
+            clearcoat:
+                0,
+
+
+            envMapIntensity:
+                0.75,
 
 
             side:
-                THREE.DoubleSide,
-
-
-            toneMapped:
-                false
+                THREE.DoubleSide
 
         });
-
-
-    // ------------------------------------------------------
-    // CREATE RUG
-    // ------------------------------------------------------
-
-    rug =
-        new THREE.Mesh(
-            geometry,
-            material
-        );
-
-
-    scene.add(
-        rug
-    );
-
-
-    // Keep every bit of your existing cloth physics.
-    initializeClothPhysics();
-
-
-    window.rug =
-        rug;
-
-
-    window.rugMaterial =
-        material;
-
-
-    window.maskDiagnostic =
-        diagnosticTexture;
-
-
-    console.log(
-        'PORPHYRA v8.3 — SAFE RGB MASK DIAGNOSTIC'
-    );
-
-}
 
 
     // ------------------------------------------------------
@@ -2102,9 +2464,13 @@ async function createRug() {
     );
 
 
-    // Keep ALL existing cloth physics.
+    // Preserve your working physics.
     initializeClothPhysics();
 
+
+    // ------------------------------------------------------
+    // DEBUG ACCESS
+    // ------------------------------------------------------
 
     window.rug =
         rug;
@@ -2114,20 +2480,33 @@ async function createRug() {
         material;
 
 
-    window.rugMask =
-        maskTexture;
+    window.porphyraMaps = {
+
+        color:
+            blendKitMaps.color,
+
+        metallic:
+            blendKitMaps.metalness,
+
+        roughness:
+            blendKitMaps.roughness,
+
+        normal:
+            normalTexture
+
+    };
 
 
     console.log(
-        'PORPHYRA v8.2 — RAW RGB CHANNEL DIAGNOSTIC'
+        'PORPHYRA v8.4 — FINAL BLENDKIT RECONSTRUCTION LOADED'
     );
 
 }
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // CAMERA FIT
-// ----------------------------------------------------------
+// ==========================================================
 
 function fitCamera() {
 
@@ -2188,9 +2567,9 @@ function fitCamera() {
 }
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // RESIZE
-// ----------------------------------------------------------
+// ==========================================================
 
 window.addEventListener(
     'resize',
@@ -2216,9 +2595,9 @@ window.addEventListener(
 );
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // START
-// ----------------------------------------------------------
+// ==========================================================
 
 const loading =
     document.getElementById(
@@ -2246,7 +2625,7 @@ try {
 
 
     console.log(
-        'PORPHYRA Cloth v8.2 loaded'
+        'PORPHYRA Cloth v8.4 loaded'
     );
 
 }
@@ -2272,9 +2651,9 @@ catch (error) {
 }
 
 
-// ----------------------------------------------------------
+// ==========================================================
 // ANIMATION
-// ----------------------------------------------------------
+// ==========================================================
 
 const clock =
     new THREE.Clock();
