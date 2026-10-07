@@ -10,18 +10,24 @@ import {
 
 
 // ==========================================================
-// PORPHYRA — INTERACTIVE CLOTH v11.2
+// PORPHYRA — INTERACTIVE CLOTH v11.2b
 //
-// REAL RUG THICKNESS
+// VISIBLE BEVELED RUG THICKNESS
 //
 // Includes:
 // - v10 cinematic lighting
 // - v11.1 dynamic fold occlusion
 // - anisotropic silk
 // - moving self-shadows
-// - REAL underside geometry
-// - REAL perimeter side walls
-// - thickness follows the moving cloth normals
+// - real underside geometry
+// - real perimeter side walls
+// - thickness following moving cloth normals
+//
+// NEW IN v11.2b:
+// - thicker visible textile profile
+// - underside perimeter inset = beveled edge
+// - slightly flexible visual perimeter
+// - subtle off-axis camera so thickness can actually be seen
 // ==========================================================
 
 
@@ -40,23 +46,39 @@ const ROWS = SEGMENTS_Y + 1;
 
 
 // ==========================================================
-// REAL RUG THICKNESS — NEW IN v11.2
+// REAL RUG THICKNESS — v11.2b
 // ==========================================================
 //
-// This is actual geometry thickness.
+// 0.055 was physically there, but extremely difficult to see
+// from the nearly perpendicular camera.
 //
-// Increase this slightly if you want the edge to read more
-// strongly.
-//
-// Good range:
-//
-// 0.040 = thin textile
-// 0.055 = current
-// 0.075 = noticeably thick rug
+// 0.075 is still textile-like, but gives the edge enough
+// depth to become visible.
 //
 // ==========================================================
 
-const RUG_THICKNESS = 0.055;
+const RUG_THICKNESS = 0.075;
+
+
+// ----------------------------------------------------------
+// BEVELED EDGE
+// ----------------------------------------------------------
+//
+// The bottom perimeter is pulled slightly toward the center
+// of the rug.
+//
+// Instead of:
+//
+// |
+//
+// the edge profile becomes approximately:
+//
+// \
+//
+// This catches light and makes the cross-section visible.
+// ----------------------------------------------------------
+
+const EDGE_BEVEL_INSET = 0.045;
 
 
 // Dark woven underside.
@@ -66,11 +88,48 @@ const UNDERSIDE_COLOR =
     );
 
 
-// Visible cut/woven edge around the perimeter.
+// Slightly warmer visible woven edge.
 const EDGE_COLOR =
     new THREE.Color(
-        0x5a4033
+        0x654939
     );
+
+
+// ==========================================================
+// CAMERA — v11.2b
+// ==========================================================
+//
+// Still essentially a front-facing product shot.
+//
+// The small Y offset introduces only a few degrees of angle,
+// which is enough for the lower/near edge to become visible.
+//
+// ==========================================================
+
+const CAMERA_X_OFFSET =
+    RUG_WIDTH * 0.008;
+
+const CAMERA_Y_OFFSET =
+    -RUG_HEIGHT * 0.10;
+
+const CAMERA_DISTANCE_MULT =
+    1.13;
+
+
+// ==========================================================
+// PERIMETER FLEX — v11.2b
+// ==========================================================
+//
+// Physics still remain stable.
+//
+// This only prevents the procedural folds from fading all
+// the way to zero at the very outer edge.
+//
+// ==========================================================
+
+const EDGE_FOLD_MINIMUM = 0.16;
+
+const EDGE_DRAG_MINIMUM = 0.04;
 
 
 // ==========================================================
@@ -108,7 +167,7 @@ const SILK_SHEEN = 0.82;
 const SILK_SHEEN_ROUGHNESS = 0.48;
 
 
-// Your preferred darker v10 lighting value.
+// Your preferred dark cinematic environment level.
 const ENVIRONMENT_INTENSITY = 0.22;
 
 
@@ -1161,7 +1220,7 @@ async function createV10SilkMaps() {
 
 
         // --------------------------------------------------
-        // CONTROLLED METAL RESPONSE
+        // CONTROLLED METALLIC THREAD
         // --------------------------------------------------
 
         const blenderMetal =
@@ -1308,7 +1367,7 @@ async function createV10SilkMaps() {
 
 
     // ------------------------------------------------------
-    // THREE.JS TEXTURES
+    // CREATE THREE.JS TEXTURES
     // ------------------------------------------------------
 
     const colorTexture =
@@ -1397,7 +1456,7 @@ let restZ;
 
 
 // ==========================================================
-// THICKNESS STATE — NEW
+// THICKNESS STATE
 // ==========================================================
 
 let undersideGeometry;
@@ -1499,6 +1558,92 @@ function smoothstep01(
         )
 
     );
+
+}
+
+
+// ==========================================================
+// EDGE BEVEL OFFSET — NEW
+// ==========================================================
+//
+// Returns an X/Y inset for the underside perimeter.
+//
+// The top edge remains full-size.
+// The underside edge is slightly smaller.
+//
+// ==========================================================
+
+function getBevelInsetForVertex(
+    vertexIndex
+) {
+
+    const x =
+        vertexIndex %
+        COLS;
+
+
+    const y =
+        Math.floor(
+            vertexIndex /
+            COLS
+        );
+
+
+    let insetX =
+        0;
+
+
+    let insetY =
+        0;
+
+
+    if (
+        x === 0
+    ) {
+
+        insetX +=
+            EDGE_BEVEL_INSET;
+
+    }
+    else if (
+        x ===
+        COLS - 1
+    ) {
+
+        insetX -=
+            EDGE_BEVEL_INSET;
+
+    }
+
+
+    if (
+        y === 0
+    ) {
+
+        insetY +=
+            EDGE_BEVEL_INSET;
+
+    }
+    else if (
+        y ===
+        ROWS - 1
+    ) {
+
+        insetY -=
+            EDGE_BEVEL_INSET;
+
+    }
+
+
+    return {
+
+        x:
+            insetX,
+
+        y:
+            insetY
+
+    };
 
 }
 
@@ -2633,7 +2778,14 @@ function simulateCloth(
 
 
     // ------------------------------------------------------
-    // PIN EDGES
+    // STABLE PHYSICS EDGES
+    // ------------------------------------------------------
+    //
+    // The physical edge remains pinned for stability.
+    //
+    // v11.2b adds a small amount of procedural fold motion
+    // later in updateGeometry(), so visually it no longer
+    // looks completely rigid.
     // ------------------------------------------------------
 
     for (
@@ -3036,12 +3188,6 @@ function updateDynamicOcclusion() {
 // ==========================================================
 // BUILD PERIMETER INDEX LOOP
 // ==========================================================
-//
-// Creates one clockwise/continuous loop around the outermost
-// vertices of the rug.
-//
-// Corners appear only once.
-// ==========================================================
 
 function buildPerimeterIndices() {
 
@@ -3049,8 +3195,7 @@ function buildPerimeterIndices() {
         [];
 
 
-    // Bottom:
-    // left -> right
+    // Bottom: left -> right
     for (
         let x = 0;
         x < COLS;
@@ -3067,8 +3212,7 @@ function buildPerimeterIndices() {
     }
 
 
-    // Right:
-    // bottom -> top
+    // Right: bottom -> top
     for (
         let y = 1;
         y < ROWS;
@@ -3085,8 +3229,7 @@ function buildPerimeterIndices() {
     }
 
 
-    // Top:
-    // right -> left
+    // Top: right -> left
     for (
         let x = COLS - 2;
         x >= 0;
@@ -3103,10 +3246,7 @@ function buildPerimeterIndices() {
     }
 
 
-    // Left:
-    // top -> bottom
-    //
-    // Exclude both corners because they're already present.
+    // Left: top -> bottom
     for (
         let y = ROWS - 2;
         y >= 1;
@@ -3129,7 +3269,7 @@ function buildPerimeterIndices() {
 
 
 // ==========================================================
-// CREATE REAL THICKNESS SHELL — NEW
+// CREATE REAL THICKNESS SHELL
 // ==========================================================
 
 function createThicknessShell() {
@@ -3140,12 +3280,6 @@ function createThicknessShell() {
 
     // ======================================================
     // UNDERSIDE
-    // ======================================================
-    //
-    // Clone the entire deforming plane topology.
-    //
-    // Every frame this copy is moved underneath the top
-    // surface along the real vertex normals.
     // ======================================================
 
     undersideGeometry =
@@ -3180,11 +3314,11 @@ function createThicknessShell() {
 
 
             roughness:
-                0.86,
+                0.88,
 
 
             sheen:
-                0.12,
+                0.10,
 
 
             sheenColor:
@@ -3194,11 +3328,11 @@ function createThicknessShell() {
 
 
             sheenRoughness:
-                0.85,
+                0.88,
 
 
             envMapIntensity:
-                0.10,
+                0.08,
 
 
             side:
@@ -3229,8 +3363,6 @@ function createThicknessShell() {
         true;
 
 
-    // Dynamic geometry can deform, so don't risk stale
-    // bounding data culling it unexpectedly.
     undersideMesh.frustumCulled =
         false;
 
@@ -3241,15 +3373,7 @@ function createThicknessShell() {
 
 
     // ======================================================
-    // SIDE WALLS
-    // ======================================================
-    //
-    // Each perimeter point has:
-    //
-    // vertex A = top edge
-    // vertex B = matching underside edge
-    //
-    // Adjacent pairs are connected into quads.
+    // BEVELED SIDE WALLS
     // ======================================================
 
     const perimeterCount =
@@ -3359,26 +3483,38 @@ function createThicknessShell() {
                 0,
 
 
+            // Slightly smoother than v11.2 so the bevel
+            // can catch a thin highlight.
             roughness:
-                0.82,
+                0.70,
 
 
             sheen:
-                0.18,
+                0.28,
 
 
             sheenColor:
                 new THREE.Color(
-                    0x9b7865
+                    0xb58c72
                 ),
 
 
             sheenRoughness:
-                0.74,
+                0.66,
+
+
+            specularIntensity:
+                0.32,
+
+
+            specularColor:
+                new THREE.Color(
+                    0xe4c6af
+                ),
 
 
             envMapIntensity:
-                0.16,
+                0.18,
 
 
             side:
@@ -3424,20 +3560,18 @@ function createThicknessShell() {
 
 
 // ==========================================================
-// UPDATE REAL RUG THICKNESS — NEW
+// UPDATE REAL RUG THICKNESS — v11.2b
 // ==========================================================
 //
-// Critical detail:
+// Bottom position:
 //
-// We do NOT simply move the underside down in world Z.
+// top
+// - normal × thickness
+// + perimeter inset
 //
-// Instead:
+// The normal offset makes thickness rotate with the cloth.
 //
-// bottom vertex =
-// top vertex - surface normal × thickness
-//
-// So if part of the rug tilts, bends, or folds, its thickness
-// rotates with the actual fabric.
+// The inset gives the side wall a visible slope/bevel.
 //
 // ==========================================================
 
@@ -3530,29 +3664,52 @@ function updateThicknessGeometry() {
             ];
 
 
+        const bevel =
+            getBevelInsetForVertex(
+                i
+            );
+
+
         bottomArray[
             offset
         ] =
 
-            tx -
+            tx
+
+            -
+
             nx *
-            RUG_THICKNESS;
+            RUG_THICKNESS
+
+            +
+
+            bevel.x;
 
 
         bottomArray[
             offset + 1
         ] =
 
-            ty -
+            ty
+
+            -
+
             ny *
-            RUG_THICKNESS;
+            RUG_THICKNESS
+
+            +
+
+            bevel.y;
 
 
         bottomArray[
             offset + 2
         ] =
 
-            tz -
+            tz
+
+            -
+
             nz *
             RUG_THICKNESS;
 
@@ -3567,7 +3724,7 @@ function updateThicknessGeometry() {
 
 
     // ------------------------------------------------------
-    // UPDATE SIDE WALLS
+    // UPDATE BEVELED SIDE WALLS
     // ------------------------------------------------------
 
     const edgeArray =
@@ -3612,7 +3769,7 @@ function updateThicknessGeometry() {
             3;
 
 
-        // Top edge vertex.
+        // Top edge.
         edgeArray[
             topVertexOffset
         ] =
@@ -3637,7 +3794,7 @@ function updateThicknessGeometry() {
             ];
 
 
-        // Bottom edge vertex.
+        // Inset lower edge.
         edgeArray[
             bottomVertexOffset
         ] =
@@ -3787,7 +3944,11 @@ function updateGeometry() {
             );
 
 
-        const edgeFade =
+        // --------------------------------------------------
+        // ORIGINAL INTERIOR EDGE FADE
+        // --------------------------------------------------
+
+        const interiorEdgeFade =
 
             smoothstep01(
 
@@ -3800,6 +3961,39 @@ function updateGeometry() {
                     0.45
 
                 )
+
+            );
+
+
+        // --------------------------------------------------
+        // NEW:
+        // FOLDS CAN NOW REACH THE PERIMETER SLIGHTLY
+        // --------------------------------------------------
+
+        const foldEdgeFlex =
+
+            lerp(
+
+                EDGE_FOLD_MINIMUM,
+
+                1.0,
+
+                interiorEdgeFade
+
+            );
+
+
+        // Keep sideways drag much weaker at the border so
+        // the overall rectangle stays visually controlled.
+        const dragEdgeFlex =
+
+            lerp(
+
+                EDGE_DRAG_MINIMUM,
+
+                1.0,
+
+                interiorEdgeFade
 
             );
 
@@ -3949,13 +4143,13 @@ function updateGeometry() {
                 combinedFold *
                 foldAmplitude *
                 envelope *
-                edgeFade;
+                foldEdgeFlex;
 
 
             const dragEnvelope =
 
                 envelope *
-                edgeFade;
+                dragEdgeFlex;
 
 
             finalX +=
@@ -3995,15 +4189,15 @@ function updateGeometry() {
         true;
 
 
-    // Must happen BEFORE thickness update.
-    //
-    // The underside offset uses these moving normals.
+    // Real moving normals.
     geometry.computeVertexNormals();
 
 
+    // Concave valley darkening.
     updateDynamicOcclusion();
 
 
+    // Underside + beveled edge follow the exact top geometry.
     updateThicknessGeometry();
 
 }
@@ -4052,7 +4246,7 @@ async function createRug() {
 
 
     // ------------------------------------------------------
-    // VERTEX COLOR OCCLUSION
+    // VERTEX OCCLUSION COLORS
     // ------------------------------------------------------
 
     const colorArray =
@@ -4100,7 +4294,7 @@ async function createRug() {
 
 
     // ------------------------------------------------------
-    // TOP SILK MATERIAL
+    // TOP SILK
     // ------------------------------------------------------
 
     const material =
@@ -4181,8 +4375,6 @@ async function createRug() {
                 true,
 
 
-            // A real solid rug now has an underside,
-            // so the top itself only needs its front face.
             side:
                 THREE.FrontSide
 
@@ -4211,6 +4403,12 @@ async function createRug() {
         true;
 
 
+    // Dynamic cloth extends slightly beyond original static
+    // bounds, so avoid aggressive frustum decisions.
+    rug.frustumCulled =
+        false;
+
+
     scene.add(
         rug
     );
@@ -4224,7 +4422,7 @@ async function createRug() {
 
 
     // ------------------------------------------------------
-    // CREATE REAL 3D THICKNESS
+    // CREATE UNDERSIDE + BEVELED PERIMETER
     // ------------------------------------------------------
 
     createThicknessShell();
@@ -4266,20 +4464,23 @@ async function createRug() {
         edgeMesh,
 
         thickness:
-            RUG_THICKNESS
+            RUG_THICKNESS,
+
+        bevel:
+            EDGE_BEVEL_INSET
 
     };
 
 
     console.log(
-        'PORPHYRA Cloth v11.2 — REAL RUG THICKNESS LOADED'
+        'PORPHYRA Cloth v11.2b — VISIBLE BEVELED THICKNESS LOADED'
     );
 
 }
 
 
 // ==========================================================
-// CAMERA FIT
+// CAMERA FIT — v11.2b
 // ==========================================================
 
 function fitCamera() {
@@ -4347,13 +4548,23 @@ function fitCamera() {
         );
 
 
+    // ------------------------------------------------------
+    // IMPORTANT:
+    //
+    // Not a dramatic angled product shot.
+    //
+    // Just enough off-axis movement to expose the beveled
+    // perimeter and underside.
+    // ------------------------------------------------------
+
     camera.position.set(
 
-        0,
-        0,
+        CAMERA_X_OFFSET,
+
+        CAMERA_Y_OFFSET,
 
         distance *
-        1.12
+        CAMERA_DISTANCE_MULT
 
     );
 
@@ -4438,7 +4649,7 @@ try {
 
 
     console.log(
-        'PORPHYRA Cloth v11.2 loaded'
+        'PORPHYRA Cloth v11.2b loaded'
     );
 
 }
