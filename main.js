@@ -74,7 +74,7 @@ const SILK_SHEEN_ROUGHNESS = 0.48;
 //
 // This is one of the main reasons the fold shadows
 // should become deeper in v10.
-const ENVIRONMENT_INTENSITY = 0.43;
+const ENVIRONMENT_INTENSITY = 0.22;
 
 
 // ==========================================================
