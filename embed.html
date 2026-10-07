@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>PORPHYRA Rug Embed</title>
+
+
+    <!-- =====================================================
+         CONNECTION WARM-UP
+         ===================================================== -->
+
+    <link
+        rel="preconnect"
+        href="https://cdn.jsdelivr.net"
+        crossorigin
+    >
+
+
+    <!-- =====================================================
+         PRELOAD PRODUCTION TEXTURES
+
+         These start downloading immediately.
+         ===================================================== -->
+
+    <link
+        rel="preload"
+        href="./textures/porphyra_color.png?v=141"
+        as="image"
+        fetchpriority="high"
+    >
+
+    <link
+        rel="preload"
+        href="./textures/porphyra_material.png?v=141"
+        as="image"
+        fetchpriority="high"
+    >
+
+    <link
+        rel="preload"
+        href="./textures/rug_normal.png?v=141"
+        as="image"
+        fetchpriority="high"
+    >
+
+
+    <!-- =====================================================
+         PRELOAD THREE.JS
+         ===================================================== -->
+
+    <link
+        rel="modulepreload"
+        href="https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"
+    >
+
+    <link
+        rel="modulepreload"
+        href="https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/environments/RoomEnvironment.js"
+    >
+
+    <link
+        rel="modulepreload"
+        href="https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/lights/RectAreaLightUniformsLib.js"
+    >
+
+
+    <!-- =====================================================
+         THREE.JS IMPORT MAP
+         ===================================================== -->
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+        }
+    }
+    </script>
+
+
+    <style>
+
+        /* ==================================================
+           ABSOLUTELY NOTHING EXCEPT THE SIMULATION
+           ================================================== */
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+
+            width: 100%;
+            height: 100%;
+
+            overflow: hidden;
+
+            background: transparent !important;
+        }
+
+
+        body {
+            position: relative;
+        }
+
+
+        /*
+            main.js creates this canvas.
+
+            Unlike index.html, there is:
+            - NO opacity fade
+            - NO image preview
+            - NO loading text
+            - NO overlay
+        */
+
+        #rugCanvas {
+            position: absolute;
+
+            inset: 0;
+
+            display: block;
+
+            width: 100% !important;
+            height: 100% !important;
+
+            background: transparent !important;
+
+            z-index: 1;
+
+            touch-action: none;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+    <!--
+        No preview div.
+        No PORPHYRA text.
+        No loading screen.
+
+        main.js creates the WebGL canvas directly.
+    -->
+
+
+    <script
+        type="module"
+        src="./main.js?v=141"
+    ></script>
+
+</body>
+
+</html>
