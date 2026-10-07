@@ -3,23 +3,26 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 
 // ==========================================================
-// PORPHYRA — INTERACTIVE CLOTH v13.1
-// PHYSICAL RUG EDGE + TOP/BOTTOM EDGE BREAKOUT
+// PORPHYRA — INTERACTIVE CLOTH v13.2
+// IMPERIAL PURPLE + ANTIQUE GOLD
 //
-// v13.1 adds:
-// - extra vertical camera breathing room
-// - separate X/Y edge deformation falloff
-// - top/bottom silhouette breakout during interaction
+// v13.2 adds:
+// - deep imperial-purple base cloth
+// - antique-gold woven motif
+// - recoloring driven by the original packed mask
+// - automatically preserves source luminance/detail
+// - gold pattern gets subtle metallic-thread response
 //
-// Keeps:
-// - integrated dark burgundy border
-// - raised woven perimeter profile
-// - subtle perimeter irregularity
-// - grazing edge lighting
-// - existing cloth physics
+// Keeps v13.1:
+// - integrated dark woven border
+// - raised physical perimeter profile
+// - top/bottom silhouette breakout
+// - separate X/Y edge falloff
+// - perimeter irregularity
 // - cinematic lighting
-// - anisotropic silk shading
-// - packed mask material recreation
+// - grazing edge lighting
+// - anisotropic silk
+// - dynamic cloth folds
 // - dynamic fold occlusion
 // ==========================================================
 
@@ -39,21 +42,85 @@ const ROWS = SEGMENTS_Y + 1;
 
 
 // ==========================================================
+// v13.2 — PORPHYRA COLORWAY
+// ==========================================================
+//
+// Main editable colors.
+//
+// Deep imperial plum:
+// #24102F
+//
+// Antique woven gold:
+// #B88A3B
+//
+// A lighter alternative gold later would be:
+// #D0A75B
+// ==========================================================
+
+const FABRIC_COLOR =
+    new THREE.Color(
+        0x24102f
+    );
+
+const PATTERN_COLOR =
+    new THREE.Color(
+        0xb88a3b
+    );
+
+
+// ----------------------------------------------------------
+// MASK INTERPRETATION
+//
+// In this texture:
+// - darker RED-mask values correspond primarily to the motif
+// - lighter RED-mask values correspond primarily to cloth
+//
+// These two values determine the transition.
+// ----------------------------------------------------------
+
+const PATTERN_MASK_DARK = 0.32;
+const PATTERN_MASK_LIGHT = 0.78;
+
+
+// ----------------------------------------------------------
+// COLOR DETAIL
+//
+// Controls how much of the original photographed/woven
+// brightness variation survives the recolor.
+//
+// 0.0 = almost flat solid colors
+// 1.0 = maximum original luminance variation
+// ----------------------------------------------------------
+
+const RECOLOR_DETAIL_STRENGTH = 0.58;
+
+
+// Overall brightness compensation after recoloring.
+const RECOLOR_BRIGHTNESS = 1.10;
+
+
+// Prevent extreme dark/light source pixels from destroying
+// the chosen purple/gold colors.
+const DETAIL_FACTOR_MIN = 0.62;
+const DETAIL_FACTOR_MAX = 1.42;
+
+
+// Existing fine weave modulation from the green mask channel.
+const COLOR_MASK_STRENGTH = 0.42;
+
+
+// ==========================================================
 // v13.1 — EDGE BREAKOUT
 // ==========================================================
 
-// Left/right still retain a fairly broad protective fade.
 const EDGE_FADE_X = 0.42;
-
-// Top/bottom deformation is allowed much closer to the edge.
 const EDGE_FADE_Y = 0.22;
 
-// Maximum outward movement of the top/bottom silhouette.
 const TOP_BOTTOM_OVERSHOOT = 0.030;
 
 
 // ==========================================================
-// v13.1 — CAMERA PADDING
+// CAMERA PADDING
 // ==========================================================
 
 const CAMERA_PADDING_X = 1.04;
@@ -63,14 +130,29 @@ const CAMERA_PADDING_Y = 1.10;
 // ==========================================================
 // INTEGRATED BORDER
 // ==========================================================
+//
+// Shifted slightly toward very dark imperial wine/plum so
+// it belongs to the new colorway.
+// ==========================================================
 
 const BORDER_WIDTH = 0.17;
 const BORDER_FEATHER = 0.018;
 const BORDER_INNER_LINE_WIDTH = 0.022;
 
-const BORDER_COLOR = new THREE.Color(0x351619);
-const BORDER_INNER_LINE_COLOR = new THREE.Color(0x6e4034);
-const BORDER_OUTER_EDGE_COLOR = new THREE.Color(0x17090b);
+const BORDER_COLOR =
+    new THREE.Color(
+        0x271329
+    );
+
+const BORDER_INNER_LINE_COLOR =
+    new THREE.Color(
+        0x593044
+    );
+
+const BORDER_OUTER_EDGE_COLOR =
+    new THREE.Color(
+        0x100812
+    );
 
 
 // ==========================================================
@@ -96,14 +178,15 @@ const REPEAT_Y = 1.6;
 
 const REPEAT_X =
     REPEAT_Y *
-    (RUG_WIDTH / RUG_HEIGHT);
+    (
+        RUG_WIDTH /
+        RUG_HEIGHT
+    );
 
 
 // ==========================================================
 // SILK MATERIAL
 // ==========================================================
-
-const COLOR_MASK_STRENGTH = 0.42;
 
 const MAX_METALNESS = 0.14;
 
@@ -204,7 +287,9 @@ let physicsAccumulator = 0;
 // SCENE
 // ==========================================================
 
-const scene = new THREE.Scene();
+const scene =
+    new THREE.Scene();
+
 
 scene.background =
     new THREE.Color(
@@ -218,11 +303,16 @@ scene.background =
 
 const camera =
     new THREE.PerspectiveCamera(
+
         32,
+
         window.innerWidth /
         window.innerHeight,
+
         0.1,
+
         100
+
     );
 
 
@@ -255,6 +345,7 @@ renderer.setPixelRatio(
 renderer.setSize(
 
     window.innerWidth,
+
     window.innerHeight
 
 );
@@ -601,7 +692,9 @@ const textureLoader =
     new THREE.TextureLoader();
 
 
-async function loadTexture(path) {
+async function loadTexture(
+    path
+) {
 
     return await textureLoader.loadAsync(
         path
@@ -610,7 +703,9 @@ async function loadTexture(path) {
 }
 
 
-function configureTexture(texture) {
+function configureTexture(
+    texture
+) {
 
     texture.wrapS =
         THREE.RepeatWrapping;
@@ -621,8 +716,11 @@ function configureTexture(texture) {
 
 
     texture.repeat.set(
+
         REPEAT_X,
+
         REPEAT_Y
+
     );
 
 
@@ -653,7 +751,9 @@ function configureTexture(texture) {
 // HTML IMAGE LOADING
 // ==========================================================
 
-function loadHtmlImage(path) {
+function loadHtmlImage(
+    path
+) {
 
     return new Promise(
         (
@@ -839,11 +939,114 @@ function linearRamp(
 }
 
 
+function smoothstepRange(
+    value,
+    low,
+    high
+) {
+
+    let t =
+
+        (
+            value -
+            low
+        )
+
+        /
+
+        (
+            high -
+            low
+        );
+
+
+    t =
+        Math.max(
+
+            0,
+
+            Math.min(
+                1,
+                t
+            )
+
+        );
+
+
+    return (
+
+        t *
+        t *
+
+        (
+            3 -
+            2 * t
+        )
+
+    );
+
+}
+
+
+function getPatternMask(
+    maskR
+) {
+
+    // Dark R = motif.
+    // Light R = backing cloth.
+
+    return (
+
+        1.0
+
+        -
+
+        smoothstepRange(
+
+            maskR,
+
+            PATTERN_MASK_DARK,
+
+            PATTERN_MASK_LIGHT
+
+        )
+
+    );
+
+}
+
+
+function linearLuminance(
+    r,
+    g,
+    b
+) {
+
+    return (
+
+        r *
+        0.2126
+
+        +
+
+        g *
+        0.7152
+
+        +
+
+        b *
+        0.0722
+
+    );
+
+}
+
+
 // ==========================================================
-// BUILD SILK MAPS
+// BUILD v13.2 PURPLE + GOLD SILK MAPS
 // ==========================================================
 
-async function createV10SilkMaps() {
+async function createPorphyraSilkMaps() {
 
     const [
         baseImage,
@@ -884,9 +1087,9 @@ async function createV10SilkMaps() {
     }
 
 
-    // ------------------------------------------------------
-    // BASE IMAGE
-    // ------------------------------------------------------
+    // ======================================================
+    // READ BASE IMAGE
+    // ======================================================
 
     const baseCanvas =
         document.createElement(
@@ -951,9 +1154,9 @@ async function createV10SilkMaps() {
         );
 
 
-    // ------------------------------------------------------
-    // MASK
-    // ------------------------------------------------------
+    // ======================================================
+    // READ PACKED MASK
+    // ======================================================
 
     const maskCanvas =
         document.createElement(
@@ -1018,9 +1221,155 @@ async function createV10SilkMaps() {
         );
 
 
-    // ------------------------------------------------------
+    const basePixels =
+        baseData.data;
+
+
+    const maskPixels =
+        maskData.data;
+
+
+    // ======================================================
+    // FIRST PASS
+    //
+    // Measure average brightness separately for:
+    //
+    // - backing cloth
+    // - decorative motif
+    //
+    // This lets us preserve the actual source weave/shading
+    // without preserving its red/tan colors.
+    // ======================================================
+
+    let fabricLuminanceSum =
+        0;
+
+
+    let fabricWeightSum =
+        0;
+
+
+    let patternLuminanceSum =
+        0;
+
+
+    let patternWeightSum =
+        0;
+
+
+    for (
+        let i = 0;
+        i < basePixels.length;
+        i += 4
+    ) {
+
+        const sourceR =
+            srgbByteToLinear(
+                basePixels[i]
+            );
+
+
+        const sourceG =
+            srgbByteToLinear(
+                basePixels[
+                    i + 1
+                ]
+            );
+
+
+        const sourceB =
+            srgbByteToLinear(
+                basePixels[
+                    i + 2
+                ]
+            );
+
+
+        const sourceLuma =
+            linearLuminance(
+
+                sourceR,
+
+                sourceG,
+
+                sourceB
+
+            );
+
+
+        const maskR =
+            maskPixels[i] /
+            255;
+
+
+        const patternMask =
+            getPatternMask(
+                maskR
+            );
+
+
+        const fabricWeight =
+            1.0 -
+            patternMask;
+
+
+        fabricLuminanceSum +=
+
+            sourceLuma *
+            fabricWeight;
+
+
+        fabricWeightSum +=
+            fabricWeight;
+
+
+        patternLuminanceSum +=
+
+            sourceLuma *
+            patternMask;
+
+
+        patternWeightSum +=
+            patternMask;
+
+    }
+
+
+    const averageFabricLuminance =
+
+        fabricLuminanceSum /
+
+        Math.max(
+            fabricWeightSum,
+            0.0001
+        );
+
+
+    const averagePatternLuminance =
+
+        patternLuminanceSum /
+
+        Math.max(
+            patternWeightSum,
+            0.0001
+        );
+
+
+    console.log(
+        'PORPHYRA v13.2 source luminance:',
+        {
+            fabric:
+                averageFabricLuminance,
+
+            pattern:
+                averagePatternLuminance
+        }
+    );
+
+
+    // ======================================================
     // OUTPUT CANVASES
-    // ------------------------------------------------------
+    // ======================================================
 
     const colorCanvas =
         document.createElement(
@@ -1089,7 +1438,7 @@ async function createV10SilkMaps() {
     ) {
 
         throw new Error(
-            'Could not create output canvases.'
+            'Could not create PORPHYRA output canvases.'
         );
 
     }
@@ -1125,14 +1474,6 @@ async function createV10SilkMaps() {
         );
 
 
-    const basePixels =
-        baseData.data;
-
-
-    const maskPixels =
-        maskData.data;
-
-
     const colorPixels =
         colorOutput.data;
 
@@ -1145,9 +1486,15 @@ async function createV10SilkMaps() {
         roughOutput.data;
 
 
-    // ------------------------------------------------------
-    // PROCESS
-    // ------------------------------------------------------
+    // ======================================================
+    // SECOND PASS
+    //
+    // Actually create:
+    //
+    // - purple/gold color map
+    // - metallic thread mask
+    // - silk roughness map
+    // ======================================================
 
     for (
         let i = 0;
@@ -1174,9 +1521,136 @@ async function createV10SilkMaps() {
             255;
 
 
+        // --------------------------------------------------
+        // PATTERN SEPARATION
+        // --------------------------------------------------
+
+        const patternMask =
+            getPatternMask(
+                maskR
+            );
+
+
+        // --------------------------------------------------
+        // ORIGINAL SOURCE BRIGHTNESS
+        // --------------------------------------------------
+
+        const sourceR =
+            srgbByteToLinear(
+                basePixels[i]
+            );
+
+
+        const sourceG =
+            srgbByteToLinear(
+                basePixels[
+                    i + 1
+                ]
+            );
+
+
+        const sourceB =
+            srgbByteToLinear(
+                basePixels[
+                    i + 2
+                ]
+            );
+
+
+        const sourceLuma =
+            linearLuminance(
+
+                sourceR,
+
+                sourceG,
+
+                sourceB
+
+            );
+
+
+        // --------------------------------------------------
+        // EXPECTED BRIGHTNESS FOR CURRENT REGION
+        //
+        // This interpolates between our measured average
+        // fabric brightness and measured motif brightness.
+        // --------------------------------------------------
+
+        const referenceLuminance =
+
+            averageFabricLuminance
+
+            +
+
+            (
+                averagePatternLuminance -
+                averageFabricLuminance
+            )
+
+            *
+
+            patternMask;
+
+
+        // --------------------------------------------------
+        // LOCAL DETAIL RATIO
+        //
+        // 1.0 = average pixel for its region.
+        //
+        // < 1.0 = darker weave/shadow.
+        //
+        // > 1.0 = brighter fiber/highlight.
+        // --------------------------------------------------
+
+        let detailFactor =
+
+            sourceLuma /
+
+            Math.max(
+                referenceLuminance,
+                0.001
+            );
+
+
+        detailFactor =
+
+            Math.max(
+
+                DETAIL_FACTOR_MIN,
+
+                Math.min(
+
+                    DETAIL_FACTOR_MAX,
+
+                    detailFactor
+
+                )
+
+            );
+
+
+        detailFactor =
+            Math.pow(
+
+                detailFactor,
+
+                RECOLOR_DETAIL_STRENGTH
+
+            );
+
+
+        // --------------------------------------------------
+        // FINE WEAVE MODULATION
+        //
+        // Preserves the same packed-mask behavior we liked
+        // in the previous material.
+        // --------------------------------------------------
+
         const greenModulation =
 
-            1.0 +
+            1.0
+
+            +
 
             (
                 maskG -
@@ -1188,41 +1662,81 @@ async function createV10SilkMaps() {
             COLOR_MASK_STRENGTH;
 
 
+        // --------------------------------------------------
+        // MIX PURPLE -> GOLD IN LINEAR SPACE
+        // --------------------------------------------------
+
         let r =
-            srgbByteToLinear(
-                basePixels[i]
-            );
+
+            FABRIC_COLOR.r
+
+            +
+
+            (
+                PATTERN_COLOR.r -
+                FABRIC_COLOR.r
+            )
+
+            *
+
+            patternMask;
 
 
         let g =
-            srgbByteToLinear(
-                basePixels[
-                    i + 1
-                ]
-            );
+
+            FABRIC_COLOR.g
+
+            +
+
+            (
+                PATTERN_COLOR.g -
+                FABRIC_COLOR.g
+            )
+
+            *
+
+            patternMask;
 
 
         let b =
-            srgbByteToLinear(
-                basePixels[
-                    i + 2
-                ]
-            );
+
+            FABRIC_COLOR.b
+
+            +
+
+            (
+                PATTERN_COLOR.b -
+                FABRIC_COLOR.b
+            )
+
+            *
+
+            patternMask;
+
+
+        // --------------------------------------------------
+        // RESTORE WOVEN DETAIL
+        // --------------------------------------------------
+
+        const finalDetail =
+
+            detailFactor *
+
+            greenModulation *
+
+            RECOLOR_BRIGHTNESS;
 
 
         r *=
-            1.3 *
-            greenModulation;
+            finalDetail;
 
 
         g *=
-            1.3 *
-            greenModulation;
+            finalDetail;
 
 
         b *=
-            1.3 *
-            greenModulation;
+            finalDetail;
 
 
         colorPixels[i] =
@@ -1253,26 +1767,20 @@ async function createV10SilkMaps() {
             255;
 
 
-        // --------------------------------------------------
-        // METALNESS
-        // --------------------------------------------------
-
-        const blenderMetal =
-            linearRamp(
-
-                maskR,
-
-                0.340,
-
-                0.578
-
-            );
-
+        // ==================================================
+        // GOLD THREAD METAL RESPONSE
+        //
+        // Purple cloth = essentially non-metallic.
+        //
+        // Gold motifs = subtle metallic woven response.
+        //
+        // Still deliberately low so this reads as silk/
+        // thread rather than polished metal foil.
+        // ==================================================
 
         const metalness =
 
-            blenderMetal *
-
+            patternMask *
             MAX_METALNESS;
 
 
@@ -1280,7 +1788,6 @@ async function createV10SilkMaps() {
             Math.round(
 
                 metalness *
-
                 255
 
             );
@@ -1308,9 +1815,12 @@ async function createV10SilkMaps() {
             255;
 
 
-        // --------------------------------------------------
-        // ROUGHNESS
-        // --------------------------------------------------
+        // ==================================================
+        // SILK ROUGHNESS
+        //
+        // Preserve the original packed blue-channel
+        // roughness behavior.
+        // ==================================================
 
         const blenderRoughness =
             linearRamp(
@@ -1326,7 +1836,9 @@ async function createV10SilkMaps() {
 
         const roughness =
 
-            MIN_SILK_ROUGHNESS +
+            MIN_SILK_ROUGHNESS
+
+            +
 
             (
                 MAX_SILK_ROUGHNESS -
@@ -1342,7 +1854,6 @@ async function createV10SilkMaps() {
             Math.round(
 
                 roughness *
-
                 255
 
             );
@@ -1372,30 +1883,43 @@ async function createV10SilkMaps() {
     }
 
 
+    // ======================================================
+    // WRITE MAPS
+    // ======================================================
+
     colorContext.putImageData(
+
         colorOutput,
+
         0,
         0
+
     );
 
 
     metalContext.putImageData(
+
         metalOutput,
+
         0,
         0
+
     );
 
 
     roughContext.putImageData(
+
         roughOutput,
+
         0,
         0
+
     );
 
 
-    // ------------------------------------------------------
-    // THREE.JS TEXTURES
-    // ------------------------------------------------------
+    // ======================================================
+    // CREATE THREE.JS TEXTURES
+    // ======================================================
 
     const colorTexture =
         new THREE.CanvasTexture(
@@ -1526,7 +2050,9 @@ function lerp(
 
     return (
 
-        a +
+        a
+
+        +
 
         (
             b -
@@ -1574,6 +2100,7 @@ function gaussian(
 ) {
 
     const d =
+
         (
             value -
             center
@@ -1597,6 +2124,7 @@ function edgeDistanceForPoint(
 ) {
 
     const dx =
+
         RUG_WIDTH *
         0.5
 
@@ -1608,6 +2136,7 @@ function edgeDistanceForPoint(
 
 
     const dy =
+
         RUG_HEIGHT *
         0.5
 
@@ -1700,24 +2229,34 @@ function edgeIrregularity(
 ) {
 
     const halfWidth =
+
         RUG_WIDTH *
         0.5;
 
 
     const halfHeight =
+
         RUG_HEIGHT *
         0.5;
 
 
     const dx =
-        halfWidth -
+
+        halfWidth
+
+        -
+
         Math.abs(
             x
         );
 
 
     const dy =
-        halfHeight -
+
+        halfHeight
+
+        -
+
         Math.abs(
             y
         );
@@ -1753,7 +2292,7 @@ function edgeIrregularity(
 
 
     // ------------------------------------------------------
-    // LEFT / RIGHT EDGE
+    // LEFT / RIGHT
     // ------------------------------------------------------
 
     if (
@@ -1839,7 +2378,7 @@ function edgeIrregularity(
 
 
     // ------------------------------------------------------
-    // TOP / BOTTOM EDGE
+    // TOP / BOTTOM
     // ------------------------------------------------------
 
     else {
@@ -2002,9 +2541,17 @@ function restingHeight(
 
     return (
 
-        wave1 +
-        wave2 +
-        wave3 +
+        wave1
+
+        +
+
+        wave2
+
+        +
+
+        wave3
+
+        +
 
         edgeProfileHeight(
             x,
@@ -2302,6 +2849,7 @@ function onPointerMove(
             .intersectPlane(
 
                 interactionPlane,
+
                 intersection
 
             );
@@ -2419,6 +2967,7 @@ function onPointerLeave() {
 renderer.domElement.addEventListener(
 
     'pointermove',
+
     onPointerMove
 
 );
@@ -2427,6 +2976,7 @@ renderer.domElement.addEventListener(
 renderer.domElement.addEventListener(
 
     'pointerleave',
+
     onPointerLeave
 
 );
@@ -2449,7 +2999,9 @@ function updateSmoothPointer(
 
     const presenceFollow =
 
-        1 -
+        1
+
+        -
 
         Math.exp(
             -10 *
@@ -2496,7 +3048,9 @@ function updateSmoothPointer(
 
     const follow =
 
-        1 -
+        1
+
+        -
 
         Math.exp(
 
@@ -2587,7 +3141,9 @@ function updateSmoothPointer(
 
     const speedFollow =
 
-        1 -
+        1
+
+        -
 
         Math.exp(
 
@@ -2630,7 +3186,9 @@ function updateSmoothPointer(
 
         const directionFollow =
 
-            1 -
+            1
+
+            -
 
             Math.exp(
 
@@ -2750,7 +3308,9 @@ function getPointerEffect() {
             lerp(
 
                 MIN_BULGE,
+
                 MAX_BULGE,
+
                 speed01
 
             ),
@@ -2761,7 +3321,9 @@ function getPointerEffect() {
             lerp(
 
                 MIN_RADIUS,
+
                 MAX_RADIUS,
+
                 speed01
 
             ),
@@ -2772,7 +3334,9 @@ function getPointerEffect() {
             lerp(
 
                 MIN_POINTER_STIFFNESS,
+
                 MAX_POINTER_STIFFNESS,
+
                 speed01
 
             ),
@@ -2783,7 +3347,9 @@ function getPointerEffect() {
             lerp(
 
                 SLOW_POINTER_DAMPING,
+
                 FAST_POINTER_DAMPING,
+
                 speed01
 
             )
@@ -2823,7 +3389,9 @@ function simulateCloth(
     for (
 
         let y = 1;
+
         y < ROWS - 1;
+
         y++
 
     ) {
@@ -2831,7 +3399,9 @@ function simulateCloth(
         for (
 
             let x = 1;
+
             x < COLS - 1;
+
             x++
 
         ) {
@@ -2874,9 +3444,12 @@ function simulateCloth(
             const neighborAverage =
 
                 (
-                    height[left] +
-                    height[right] +
-                    height[down] +
+                    height[left]
+                    +
+                    height[right]
+                    +
+                    height[down]
+                    +
                     height[up]
                 )
 
@@ -2913,7 +3486,8 @@ function simulateCloth(
 
     if (
 
-        pointerActive &&
+        pointerActive
+        &&
         hasSmoothPointer
 
     ) {
@@ -2931,7 +3505,9 @@ function simulateCloth(
         for (
 
             let y = 1;
+
             y < ROWS - 1;
+
             y++
 
         ) {
@@ -2939,7 +3515,9 @@ function simulateCloth(
             for (
 
                 let x = 1;
+
                 x < COLS - 1;
+
                 x++
 
             ) {
@@ -2990,14 +3568,15 @@ function simulateCloth(
 
                     let influence =
 
-                        1 -
+                        1
+
+                        -
 
                         distance /
                         effect.radius;
 
 
                     influence =
-
                         smoothstep01(
                             influence
                         );
@@ -3023,8 +3602,10 @@ function simulateCloth(
 
                     acceleration[i] -=
 
-                        velocity[i] *
-                        effect.localDamping *
+                        velocity[i]
+                        *
+                        effect.localDamping
+                        *
                         influence;
 
                 }
@@ -3051,7 +3632,9 @@ function simulateCloth(
     for (
 
         let y = 1;
+
         y < ROWS - 1;
+
         y++
 
     ) {
@@ -3059,7 +3642,9 @@ function simulateCloth(
         for (
 
             let x = 1;
+
             x < COLS - 1;
+
             x++
 
         ) {
@@ -3093,11 +3678,6 @@ function simulateCloth(
 
     // ------------------------------------------------------
     // PIN PERIMETER HEIGHT
-    //
-    // Only Z motion is pinned here.
-    //
-    // v13.1 allows updateGeometry() to move the top/bottom
-    // silhouette slightly outward in X/Y space.
     // ------------------------------------------------------
 
     for (
@@ -3186,8 +3766,10 @@ function updateDynamicOcclusion() {
 
     if (
 
-        !positions ||
-        !vertexColors ||
+        !positions
+        ||
+        !vertexColors
+        ||
         !restZ
 
     ) {
@@ -3245,9 +3827,12 @@ function updateDynamicOcclusion() {
 
             if (
 
-                x > 0 &&
-                x < COLS - 1 &&
-                y > 0 &&
+                x > 0
+                &&
+                x < COLS - 1
+                &&
+                y > 0
+                &&
                 y < ROWS - 1
 
             ) {
@@ -3338,9 +3923,12 @@ function updateDynamicOcclusion() {
                 const neighborAverage =
 
                     (
-                        leftDisp +
-                        rightDisp +
-                        downDisp +
+                        leftDisp
+                        +
+                        rightDisp
+                        +
+                        downDisp
+                        +
                         upDisp
                     )
 
@@ -3410,7 +3998,10 @@ function updateDynamicOcclusion() {
 
                 const edgeDistanceX =
 
-                    halfWidth -
+                    halfWidth
+
+                    -
+
                     Math.abs(
                         restX[i]
                     );
@@ -3418,7 +4009,10 @@ function updateDynamicOcclusion() {
 
                 const edgeDistanceY =
 
-                    halfHeight -
+                    halfHeight
+
+                    -
+
                     Math.abs(
                         restY[i]
                     );
@@ -3574,7 +4168,7 @@ function installIntegratedBorder(
 
 
         // --------------------------------------------------
-        // PASS ORIGINAL LOCAL XY POSITION TO FRAGMENT SHADER
+        // PASS LOCAL POSITION
         // --------------------------------------------------
 
         shader.vertexShader =
@@ -3625,7 +4219,7 @@ function installIntegratedBorder(
 
 
         // --------------------------------------------------
-        // APPLY BORDER AFTER BASE COLOR TEXTURE
+        // APPLY BORDER
         // --------------------------------------------------
 
         shader.fragmentShader =
@@ -3715,7 +4309,7 @@ function installIntegratedBorder(
 
     material.customProgramCacheKey =
         () =>
-            'porphyra-v13-1-edge-breakout';
+            'porphyra-v13-2-purple-gold';
 
 }
 
@@ -3814,10 +4408,6 @@ function updateGeometry() {
             restY[i];
 
 
-        // --------------------------------------------------
-        // STATIC IMPERFECT PERIMETER
-        // --------------------------------------------------
-
         const irregular =
             edgeIrregularity(
 
@@ -3829,11 +4419,13 @@ function updateGeometry() {
 
 
         let finalX =
+
             baseX +
             irregular.x;
 
 
         let finalY =
+
             baseY +
             irregular.y;
 
@@ -3844,7 +4436,10 @@ function updateGeometry() {
 
         const edgeDistanceX =
 
-            halfWidth -
+            halfWidth
+
+            -
+
             Math.abs(
                 baseX
             );
@@ -3852,19 +4447,14 @@ function updateGeometry() {
 
         const edgeDistanceY =
 
-            halfHeight -
+            halfHeight
+
+            -
+
             Math.abs(
                 baseY
             );
 
-
-        // --------------------------------------------------
-        // v13.1 — SEPARATE X/Y EDGE FADES
-        //
-        // Y uses a much shorter fade distance, allowing
-        // deformation to remain visible much closer to the
-        // top and bottom perimeter.
-        // --------------------------------------------------
 
         const edgeFadeX =
 
@@ -4066,25 +4656,18 @@ function updateGeometry() {
 
 
             // --------------------------------------------------
-            // v13.1 — TOP/BOTTOM SILHOUETTE BREAKOUT
-            //
-            // edgeFadeY approaches zero at the exact top/bottom
-            // perimeter.
-            //
-            // Therefore:
-            // 1 - edgeFadeY
-            //
-            // becomes strongest right at those edges.
-            //
-            // edgeFadeX prevents the effect from becoming weird
-            // at the four corners.
+            // TOP/BOTTOM SILHOUETTE BREAKOUT
             // --------------------------------------------------
 
             const topBottomInfluence =
 
-                envelope *
+                envelope
 
-                edgeFadeX *
+                *
+
+                edgeFadeX
+
+                *
 
                 (
                     1.0 -
@@ -4121,8 +4704,10 @@ function updateGeometry() {
 
             finalY,
 
-            restZ[i] +
-            height[i] +
+            restZ[i]
+            +
+            height[i]
+            +
             foldZ
 
         );
@@ -4154,7 +4739,7 @@ async function createRug() {
     ] =
         await Promise.all([
 
-            createV10SilkMaps(),
+            createPorphyraSilkMaps(),
 
             loadTexture(
                 './textures/rug_normal.png'
@@ -4187,7 +4772,7 @@ async function createRug() {
 
 
     // ------------------------------------------------------
-    // VERTEX COLORS FOR FOLD OCCLUSION
+    // VERTEX COLORS
     // ------------------------------------------------------
 
     const colorArray =
@@ -4235,7 +4820,7 @@ async function createRug() {
 
 
     // ------------------------------------------------------
-    // SILK MATERIAL
+    // PORPHYRA SILK MATERIAL
     // ------------------------------------------------------
 
     const material =
@@ -4245,6 +4830,10 @@ async function createRug() {
                 silkMaps.colorTexture,
 
 
+            // ------------------------------------------------
+            // SUBTLE GOLD THREAD METALLIC RESPONSE
+            // ------------------------------------------------
+
             metalness:
                 1.0,
 
@@ -4253,6 +4842,10 @@ async function createRug() {
                 silkMaps.metalnessTexture,
 
 
+            // ------------------------------------------------
+            // SILK ROUGHNESS
+            // ------------------------------------------------
+
             roughness:
                 1.0,
 
@@ -4260,6 +4853,10 @@ async function createRug() {
             roughnessMap:
                 silkMaps.roughnessTexture,
 
+
+            // ------------------------------------------------
+            // MICRO WEAVE
+            // ------------------------------------------------
 
             normalMap:
                 normalMap,
@@ -4272,6 +4869,10 @@ async function createRug() {
                 ),
 
 
+            // ------------------------------------------------
+            // ANISOTROPIC SILK
+            // ------------------------------------------------
+
             anisotropy:
                 SILK_ANISOTROPY,
 
@@ -4280,19 +4881,29 @@ async function createRug() {
                 SILK_ANISOTROPY_ROTATION,
 
 
+            // ------------------------------------------------
+            // FABRIC SHEEN
+            // ------------------------------------------------
+
             sheen:
                 SILK_SHEEN,
 
 
+            // Warmer, slightly golden sheen works nicely
+            // across both purple silk and gold ornament.
             sheenColor:
                 new THREE.Color(
-                    0xd1a987
+                    0xd3ae78
                 ),
 
 
             sheenRoughness:
                 SILK_SHEEN_ROUGHNESS,
 
+
+            // ------------------------------------------------
+            // NON-METAL SPECULAR
+            // ------------------------------------------------
 
             specularIntensity:
                 0.58,
@@ -4325,10 +4936,6 @@ async function createRug() {
     material.shadowSide =
         THREE.DoubleSide;
 
-
-    // ------------------------------------------------------
-    // INTEGRATED BORDER
-    // ------------------------------------------------------
 
     installIntegratedBorder(
         material
@@ -4365,9 +4972,9 @@ async function createRug() {
     initializeClothPhysics();
 
 
-    // ------------------------------------------------------
+    // ======================================================
     // DEBUG ACCESS
-    // ------------------------------------------------------
+    // ======================================================
 
     window.rug =
         rug;
@@ -4424,8 +5031,25 @@ async function createRug() {
     };
 
 
+    window.porphyraColorway = {
+
+        fabric:
+            FABRIC_COLOR,
+
+        pattern:
+            PATTERN_COLOR,
+
+        detailStrength:
+            RECOLOR_DETAIL_STRENGTH,
+
+        brightness:
+            RECOLOR_BRIGHTNESS
+
+    };
+
+
     console.log(
-        'PORPHYRA Cloth v13.1 — EDGE BREAKOUT LOADED'
+        'PORPHYRA Cloth v13.2 — IMPERIAL PURPLE + ANTIQUE GOLD LOADED'
     );
 
 }
@@ -4452,13 +5076,6 @@ function fitCamera() {
             camera.fov
         );
 
-
-    // ------------------------------------------------------
-    // v13.1 — EXTRA CAMERA ROOM
-    //
-    // Slightly more room vertically gives the top/bottom
-    // silhouette somewhere to move without appearing clipped.
-    // ------------------------------------------------------
 
     const paddedWidth =
 
@@ -4611,7 +5228,7 @@ try {
 
 
     console.log(
-        'PORPHYRA Cloth v13.1 loaded'
+        'PORPHYRA Cloth v13.2 loaded'
     );
 
 }
