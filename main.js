@@ -1712,7 +1712,24 @@ metalnessFactor =
 
 
 // ----------------------------------------------------------
-// CREATE RUG
+// CREATE RUG — V8.1 MASK DIAGNOSTIC
+// ----------------------------------------------------------
+//
+// TEMPORARY TEST:
+//
+// This deliberately displays rug_mask.png directly as the
+// visible surface of the cloth.
+//
+// Expected result:
+//
+// RED / PINK + BLUE / PURPLE mask colors.
+//
+// If you see those colors, we know:
+// 1. rug_mask.png is loading
+// 2. its UV tiling matches the rug
+// 3. Three.js can use the texture correctly
+//
+// After testing, we will REMOVE this diagnostic.
 // ----------------------------------------------------------
 
 async function createRug() {
@@ -1739,15 +1756,20 @@ async function createRug() {
 
 
     // ------------------------------------------------------
-    // COLOR SPACES
+    // COLOR SPACE
     // ------------------------------------------------------
 
     baseColor.colorSpace =
         THREE.SRGBColorSpace;
 
 
+    // Normally this is DATA, not visible color.
+    //
+    // But for this diagnostic we are intentionally displaying
+    // it directly, so using SRGB makes the RGB channels easier
+    // to inspect visually.
     maskTexture.colorSpace =
-        THREE.NoColorSpace;
+        THREE.SRGBColorSpace;
 
 
     normalMap.colorSpace =
@@ -1755,7 +1777,7 @@ async function createRug() {
 
 
     // ------------------------------------------------------
-    // SAME UV/TILING FOR ALL TEXTURES
+    // UV / TILING
     // ------------------------------------------------------
 
     configureTexture(
@@ -1787,72 +1809,32 @@ async function createRug() {
 
 
     // ------------------------------------------------------
-    // MATERIAL
+    // DIAGNOSTIC MATERIAL
+    // ------------------------------------------------------
     //
-    // This version intentionally removes the extra fake
-    // silk sheen from v7.
+    // MeshBasicMaterial intentionally ignores:
     //
-    // First we reproduce the Blender material accurately.
-    // Later we'll improve it beyond Blender with anisotropy.
+    // lighting
+    // roughness
+    // metallic
+    // normal maps
+    // environment reflections
+    //
+    // So what you see is essentially the raw packed-mask
+    // image placed on the moving cloth.
     // ------------------------------------------------------
 
     const material =
-        new THREE.MeshPhysicalMaterial({
+        new THREE.MeshBasicMaterial({
 
             map:
-                baseColor,
-
-
-            normalMap:
-                normalMap,
-
-
-            // Blender normal strength = 0.8.
-            // Y is inverted to match the Blender node graph.
-            normalScale:
-                new THREE.Vector2(
-                    0.8,
-                    -0.8
-                ),
-
-
-            // Replaced per-pixel by the mask shader.
-            metalness:
-                0,
-
-
-            // Replaced per-pixel by the mask shader.
-            roughness:
-                0.5,
-
-
-            // Disabled for this reconstruction step.
-            sheen:
-                0,
-
-
-            clearcoat:
-                0,
-
-
-            envMapIntensity:
-                0.75,
+                maskTexture,
 
 
             side:
                 THREE.DoubleSide
 
         });
-
-
-    // ------------------------------------------------------
-    // APPLY ORIGINAL BLENDKIT MATERIAL LOGIC
-    // ------------------------------------------------------
-
-    applyBlendKitFabricShader(
-        material,
-        maskTexture
-    );
 
 
     // ------------------------------------------------------
@@ -1869,6 +1851,29 @@ async function createRug() {
     scene.add(
         rug
     );
+
+
+    // KEEP ALL EXISTING CLOTH PHYSICS.
+    initializeClothPhysics();
+
+
+    window.rug =
+        rug;
+
+
+    window.rugMaterial =
+        material;
+
+
+    window.rugMask =
+        maskTexture;
+
+
+    console.log(
+        'PORPHYRA v8.1 MASK DIAGNOSTIC ACTIVE'
+    );
+
+}
 
 
     // Preserve v7 physics/folding behavior.
