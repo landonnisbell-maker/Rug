@@ -10,30 +10,30 @@ import {
 
 
 // ==========================================================
-// PORPHYRA — INTERACTIVE CLOTH v14.1
-// TRANSPARENT + INSTANT-PREVIEW PRODUCTION BUILD
+// PORPHYRA — INTERACTIVE CLOTH v14.2
+// WIX-SAFE DIRECT WEBGL BUILD
 //
-// v14.1:
+// v14.2:
 //
-// - fully transparent WebGL background
-// - transparent HTML document
-// - no PORPHYRA loading text
-// - no loading screen
-// - textures are preloaded by index.html
-// - static rug appears immediately
-// - real Three.js rug replaces preview after first render
+// - no preview image
+// - no loading overlay
+// - no opacity transition
+// - no .ready class
+// - no reveal handoff
+// - transparent background
+// - direct WebGL rendering
+// - production baked textures
 //
 // Keeps:
 //
-// - pre-baked v14 material
 // - imperial purple + antique gold
-// - packed roughness / metalness map
+// - packed roughness/metalness map
 // - silk normal map
-// - interactive cloth physics
 // - physical border
 // - edge breakout
-// - dynamic fold occlusion
 // - cinematic lighting
+// - dynamic cloth physics
+// - dynamic fold occlusion
 // ==========================================================
 
 
@@ -53,18 +53,16 @@ const ROWS = SEGMENTS_Y + 1;
 
 // ==========================================================
 // PRODUCTION TEXTURES
-//
-// These EXACT URLs are also preloaded in index.html.
 // ==========================================================
 
 const COLOR_TEXTURE_PATH =
-    './textures/porphyra_color.png?v=141';
+    './textures/porphyra_color.png?v=142';
 
 const MATERIAL_TEXTURE_PATH =
-    './textures/porphyra_material.png?v=141';
+    './textures/porphyra_material.png?v=142';
 
 const NORMAL_TEXTURE_PATH =
-    './textures/rug_normal.png?v=141';
+    './textures/rug_normal.png?v=142';
 
 
 // ==========================================================
@@ -78,7 +76,7 @@ const TOP_BOTTOM_OVERSHOOT = 0.030;
 
 
 // ==========================================================
-// CAMERA
+// CAMERA PADDING
 // ==========================================================
 
 const CAMERA_PADDING_X = 1.04;
@@ -233,16 +231,6 @@ let physicsAccumulator = 0;
 
 
 // ==========================================================
-// INSTANT PREVIEW
-// ==========================================================
-
-const rugPreview =
-    document.getElementById(
-        'rugPreview'
-    );
-
-
-// ==========================================================
 // SCENE
 // ==========================================================
 
@@ -250,11 +238,7 @@ const scene =
     new THREE.Scene();
 
 
-// IMPORTANT:
-//
-// Do NOT give the scene a background color.
-//
-// This allows the Wix page beneath the iframe to show through.
+// TRANSPARENT
 
 scene.background = null;
 
@@ -279,15 +263,17 @@ const camera =
 
 
 // ==========================================================
-// TRANSPARENT RENDERER
+// RENDERER
 // ==========================================================
 
 const renderer =
     new THREE.WebGLRenderer({
 
-        antialias: true,
+        antialias:
+            true,
 
-        alpha: true,
+        alpha:
+            true,
 
         powerPreference:
             'high-performance'
@@ -295,13 +281,9 @@ const renderer =
     });
 
 
-// Give CSS a stable target.
-
 renderer.domElement.id =
     'rugCanvas';
 
-
-// Completely transparent canvas clear.
 
 renderer.setClearColor(
     0x000000,
@@ -672,7 +654,9 @@ const textureLoader =
     new THREE.TextureLoader();
 
 
-async function loadTexture(path) {
+async function loadTexture(
+    path
+) {
 
     return await textureLoader.loadAsync(
         path
@@ -681,7 +665,9 @@ async function loadTexture(path) {
 }
 
 
-function configureTexture(texture) {
+function configureTexture(
+    texture
+) {
 
     texture.wrapS =
         THREE.RepeatWrapping;
@@ -756,10 +742,6 @@ async function loadPorphyraMaterialMaps() {
         ]);
 
 
-    // ------------------------------------------------------
-    // COLOR
-    // ------------------------------------------------------
-
     colorTexture.colorSpace =
         THREE.SRGBColorSpace;
 
@@ -769,13 +751,6 @@ async function loadPorphyraMaterialMaps() {
     );
 
 
-    // ------------------------------------------------------
-    // PACKED MATERIAL
-    //
-    // G = roughness
-    // B = metalness
-    // ------------------------------------------------------
-
     materialTexture.colorSpace =
         THREE.NoColorSpace;
 
@@ -784,10 +759,6 @@ async function loadPorphyraMaterialMaps() {
         materialTexture
     );
 
-
-    // ------------------------------------------------------
-    // NORMAL
-    // ------------------------------------------------------
 
     normalTexture.colorSpace =
         THREE.NoColorSpace;
@@ -840,7 +811,10 @@ let restZ;
 // HELPERS
 // ==========================================================
 
-function indexOf(x, y) {
+function indexOf(
+    x,
+    y
+) {
 
     return (
         y *
@@ -851,7 +825,9 @@ function indexOf(x, y) {
 }
 
 
-function clamp01(value) {
+function clamp01(
+    value
+) {
 
     return Math.max(
 
@@ -867,7 +843,11 @@ function clamp01(value) {
 }
 
 
-function lerp(a, b, t) {
+function lerp(
+    a,
+    b,
+    t
+) {
 
     return (
 
@@ -887,7 +867,9 @@ function lerp(a, b, t) {
 }
 
 
-function smoothstep01(t) {
+function smoothstep01(
+    t
+) {
 
     t =
         clamp01(
@@ -1029,8 +1011,10 @@ function edgeProfileHeight(
 
 
     return (
+
         ridge -
         outerLip
+
     );
 
 }
@@ -1101,8 +1085,12 @@ function edgeIrregularity(
         );
 
 
-    let offsetX = 0;
-    let offsetY = 0;
+    let offsetX =
+        0;
+
+
+    let offsetY =
+        0;
 
 
     // ------------------------------------------------------
@@ -1114,7 +1102,8 @@ function edgeIrregularity(
         dy
     ) {
 
-        const along = y;
+        const along =
+            y;
 
 
         const wave =
@@ -1196,7 +1185,8 @@ function edgeIrregularity(
 
     else {
 
-        const along = x;
+        const along =
+            x;
 
 
         const wave =
@@ -1450,9 +1440,16 @@ function initializeClothPhysics() {
             );
 
 
-        restX[i] = x;
-        restY[i] = y;
-        restZ[i] = z;
+        restX[i] =
+            x;
+
+
+        restY[i] =
+            y;
+
+
+        restZ[i] =
+            z;
 
 
         const irregular =
@@ -1521,34 +1518,65 @@ const intersection =
     new THREE.Vector3();
 
 
-let pointerActive = false;
+let pointerActive =
+    false;
 
-let targetPointerX = 0;
-let targetPointerY = 0;
 
-let smoothPointerX = 0;
-let smoothPointerY = 0;
+let targetPointerX =
+    0;
 
-let previousSmoothPointerX = 0;
-let previousSmoothPointerY = 0;
 
-let smoothPointerSpeed = 0;
+let targetPointerY =
+    0;
 
-let motionDirX = 1;
-let motionDirY = 0;
 
-let hasSmoothPointer = false;
+let smoothPointerX =
+    0;
 
-let interactionPresence = 0;
 
-let visualSpeed01 = 0;
+let smoothPointerY =
+    0;
+
+
+let previousSmoothPointerX =
+    0;
+
+
+let previousSmoothPointerY =
+    0;
+
+
+let smoothPointerSpeed =
+    0;
+
+
+let motionDirX =
+    1;
+
+
+let motionDirY =
+    0;
+
+
+let hasSmoothPointer =
+    false;
+
+
+let interactionPresence =
+    0;
+
+
+let visualSpeed01 =
+    0;
 
 
 // ==========================================================
 // POINTER MOVE
 // ==========================================================
 
-function onPointerMove(event) {
+function onPointerMove(
+    event
+) {
 
     const rect =
 
@@ -1627,7 +1655,9 @@ function onPointerMove(event) {
         !hit
     ) {
 
-        pointerActive = false;
+        pointerActive =
+            false;
+
 
         return;
 
@@ -1661,7 +1691,9 @@ function onPointerMove(event) {
         !inside
     ) {
 
-        pointerActive = false;
+        pointerActive =
+            false;
+
 
         return;
 
@@ -1696,12 +1728,14 @@ function onPointerMove(event) {
             smoothPointerY;
 
 
-        hasSmoothPointer = true;
+        hasSmoothPointer =
+            true;
 
     }
 
 
-    pointerActive = true;
+    pointerActive =
+        true;
 
 }
 
@@ -1712,11 +1746,16 @@ function onPointerMove(event) {
 
 function onPointerLeave() {
 
-    pointerActive = false;
+    pointerActive =
+        false;
 
-    hasSmoothPointer = false;
 
-    smoothPointerSpeed = 0;
+    hasSmoothPointer =
+        false;
+
+
+    smoothPointerSpeed =
+        0;
 
 }
 
@@ -1743,14 +1782,20 @@ renderer.domElement.addEventListener(
 // SMOOTH POINTER
 // ==========================================================
 
-function updateSmoothPointer(dt) {
+function updateSmoothPointer(
+    dt
+) {
 
     const presenceTarget =
 
         pointerActive
+
             ?
+
             1
+
             :
+
             0;
 
 
@@ -1761,8 +1806,10 @@ function updateSmoothPointer(dt) {
         -
 
         Math.exp(
+
             -10 *
             dt
+
         );
 
 
@@ -1785,16 +1832,20 @@ function updateSmoothPointer(dt) {
         smoothPointerSpeed *=
 
             Math.exp(
+
                 -10 *
                 dt
+
             );
 
 
         visualSpeed01 *=
 
             Math.exp(
+
                 -7 *
                 dt
+
             );
 
 
@@ -1858,8 +1909,11 @@ function updateSmoothPointer(dt) {
         dx /
 
         Math.max(
+
             dt,
+
             0.0001
+
         );
 
 
@@ -1868,8 +1922,11 @@ function updateSmoothPointer(dt) {
         dy /
 
         Math.max(
+
             dt,
+
             0.0001
+
         );
 
 
@@ -2120,7 +2177,9 @@ function getPointerEffect() {
 // CLOTH SIMULATION
 // ==========================================================
 
-function simulateCloth(dt) {
+function simulateCloth(
+    dt
+) {
 
     updateSmoothPointer(
         dt
@@ -2142,15 +2201,23 @@ function simulateCloth(dt) {
     // ------------------------------------------------------
 
     for (
+
         let y = 1;
+
         y < ROWS - 1;
+
         y++
+
     ) {
 
         for (
+
             let x = 1;
+
             x < COLS - 1;
+
             x++
+
         ) {
 
             const i =
@@ -2246,15 +2313,23 @@ function simulateCloth(dt) {
 
 
         for (
+
             let y = 1;
+
             y < ROWS - 1;
+
             y++
+
         ) {
 
             for (
+
                 let x = 1;
+
                 x < COLS - 1;
+
                 x++
+
             ) {
 
                 const i =
@@ -2364,15 +2439,23 @@ function simulateCloth(dt) {
 
 
     for (
+
         let y = 1;
+
         y < ROWS - 1;
+
         y++
+
     ) {
 
         for (
+
             let x = 1;
+
             x < COLS - 1;
+
             x++
+
         ) {
 
             const i =
@@ -2403,7 +2486,7 @@ function simulateCloth(dt) {
 
 
     // ------------------------------------------------------
-    // PIN PERIMETER HEIGHT
+    // PIN PERIMETER
     // ------------------------------------------------------
 
     for (
@@ -2426,11 +2509,20 @@ function simulateCloth(dt) {
             );
 
 
-        height[bottom] = 0;
-        velocity[bottom] = 0;
+        height[bottom] =
+            0;
 
-        height[top] = 0;
-        velocity[top] = 0;
+
+        velocity[bottom] =
+            0;
+
+
+        height[top] =
+            0;
+
+
+        velocity[top] =
+            0;
 
     }
 
@@ -2455,11 +2547,20 @@ function simulateCloth(dt) {
             );
 
 
-        height[left] = 0;
-        velocity[left] = 0;
+        height[left] =
+            0;
 
-        height[right] = 0;
-        velocity[right] = 0;
+
+        velocity[left] =
+            0;
+
+
+        height[right] =
+            0;
+
+
+        velocity[right] =
+            0;
 
     }
 
@@ -2698,7 +2799,10 @@ function updateDynamicOcclusion() {
 
                 const edgeDistanceX =
 
-                    halfWidth -
+                    halfWidth
+
+                    -
+
                     Math.abs(
                         restX[i]
                     );
@@ -2706,7 +2810,10 @@ function updateDynamicOcclusion() {
 
                 const edgeDistanceY =
 
-                    halfHeight -
+                    halfHeight
+
+                    -
+
                     Math.abs(
                         restY[i]
                     );
@@ -2786,7 +2893,7 @@ function updateDynamicOcclusion() {
 
 
 // ==========================================================
-// INTEGRATED BORDER SHADER
+// BORDER SHADER
 // ==========================================================
 
 function installIntegratedBorder(
@@ -2860,10 +2967,6 @@ function installIntegratedBorder(
             };
 
 
-            // --------------------------------------------------
-            // LOCAL POSITION
-            // --------------------------------------------------
-
             shader.vertexShader =
 
                 shader.vertexShader.replace(
@@ -2906,10 +3009,6 @@ function installIntegratedBorder(
 
                 );
 
-
-            // --------------------------------------------------
-            // BORDER
-            // --------------------------------------------------
 
             shader.fragmentShader =
 
@@ -2998,13 +3097,13 @@ function installIntegratedBorder(
 
     material.customProgramCacheKey =
         () =>
-            'porphyra-v14-1-transparent';
+            'porphyra-v14-2-wix-direct';
 
 }
 
 
 // ==========================================================
-// UPDATE CLOTH GEOMETRY
+// UPDATE GEOMETRY
 // ==========================================================
 
 function updateGeometry() {
@@ -3119,12 +3218,16 @@ function updateGeometry() {
             irregular.y;
 
 
-        let foldZ = 0;
+        let foldZ =
+            0;
 
 
         const edgeDistanceX =
 
-            halfWidth -
+            halfWidth
+
+            -
+
             Math.abs(
                 baseX
             );
@@ -3132,7 +3235,10 @@ function updateGeometry() {
 
         const edgeDistanceY =
 
-            halfHeight -
+            halfHeight
+
+            -
+
             Math.abs(
                 baseY
             );
@@ -3337,10 +3443,6 @@ function updateGeometry() {
                 dragEnvelope;
 
 
-            // --------------------------------------------------
-            // TOP/BOTTOM SILHOUETTE BREAKOUT
-            // --------------------------------------------------
-
             const topBottomInfluence =
 
                 envelope
@@ -3387,9 +3489,13 @@ function updateGeometry() {
             finalY,
 
             restZ[i]
+
             +
+
             height[i]
+
             +
+
             foldZ
 
         );
@@ -3492,8 +3598,6 @@ async function createRug() {
                 maps.colorTexture,
 
 
-            // BLUE channel
-
             metalness:
                 1.0,
 
@@ -3501,8 +3605,6 @@ async function createRug() {
             metalnessMap:
                 maps.materialTexture,
 
-
-            // GREEN channel
 
             roughness:
                 1.0,
@@ -3518,8 +3620,11 @@ async function createRug() {
 
             normalScale:
                 new THREE.Vector2(
+
                     0.8,
+
                     -0.8
+
                 ),
 
 
@@ -3612,9 +3717,9 @@ async function createRug() {
     initializeClothPhysics();
 
 
-    // ======================================================
+    // ------------------------------------------------------
     // DEBUG ACCESS
-    // ======================================================
+    // ------------------------------------------------------
 
     window.rug =
         rug;
@@ -3656,7 +3761,7 @@ async function createRug() {
 
 
     console.log(
-        'PORPHYRA Cloth v14.1 — TRANSPARENT PRODUCTION RUG LOADED'
+        'PORPHYRA Cloth v14.2 — WIX DIRECT BUILD LOADED'
     );
 
 }
@@ -3804,73 +3909,6 @@ window.addEventListener(
 
 
 // ==========================================================
-// REVEAL REAL RUG
-// ==========================================================
-
-function revealInteractiveRug() {
-
-    /*
-        Render one full real frame BEFORE exposing the canvas.
-
-        That prevents the visitor from seeing:
-
-        - a transparent empty canvas
-        - partially compiled shaders
-        - missing textures
-    */
-
-    renderer.render(
-        scene,
-        camera
-    );
-
-
-    requestAnimationFrame(
-
-        () => {
-
-            renderer.domElement
-                .classList
-                .add(
-                    'ready'
-                );
-
-
-            if (
-                rugPreview
-            ) {
-
-                rugPreview
-                    .classList
-                    .add(
-                        'hidden'
-                    );
-
-
-                // Completely remove it after the tiny fade.
-
-                window.setTimeout(
-
-                    () => {
-
-                        rugPreview.remove();
-
-                    },
-
-                    180
-
-                );
-
-            }
-
-        }
-
-    );
-
-}
-
-
-// ==========================================================
 // ANIMATION
 // ==========================================================
 
@@ -3902,7 +3940,8 @@ function startAnimation() {
                 frameTime;
 
 
-            let substeps = 0;
+            let substeps =
+                0;
 
 
             while (
@@ -3938,7 +3977,8 @@ function startAnimation() {
 
             ) {
 
-                physicsAccumulator = 0;
+                physicsAccumulator =
+                    0;
 
             }
 
@@ -3979,18 +4019,28 @@ try {
     await createRug();
 
 
-    // Real first frame.
+    // ------------------------------------------------------
+    // DIRECT FIRST FRAME
+    //
+    // No preview.
+    // No opacity handoff.
+    // No DOM state transition.
+    // ------------------------------------------------------
 
-    revealInteractiveRug();
+    renderer.render(
 
+        scene,
 
-    // Begin interactive rendering.
+        camera
+
+    );
+
 
     startAnimation();
 
 
     console.log(
-        'PORPHYRA Cloth v14.1 ready'
+        'PORPHYRA Cloth v14.2 ready'
     );
 
 }
@@ -3998,19 +4048,12 @@ catch (
     error
 ) {
 
-    /*
-        In production we intentionally DO NOT replace the rug
-        with a giant error message.
-
-        If Three.js ever fails, the visitor at least still
-        sees the instantaneous static rug preview.
-
-        The actual error remains available in DevTools.
-    */
-
     console.error(
+
         'PORPHYRA failed to initialize:',
+
         error
+
     );
 
 }
