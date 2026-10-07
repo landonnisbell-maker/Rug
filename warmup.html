@@ -2,7 +2,6 @@
 <html lang="en">
 
 <head>
-
     <meta charset="UTF-8">
 
     <meta
@@ -10,72 +9,9 @@
         content="width=device-width, initial-scale=1"
     >
 
-
     <title>PORPHYRA Warmup</title>
 
-
-    <script type="importmap">
-    {
-        "imports": {
-            "three": "./vendor/three.module.js?v=180"
-        }
-    }
-    </script>
-
-
-    <!-- =====================================================
-         PRELOAD MODULE GRAPH
-         ===================================================== -->
-
-    <link
-        rel="modulepreload"
-        href="./vendor/three.module.js?v=180"
-    >
-
-    <link
-        rel="modulepreload"
-        href="./vendor/environments/RoomEnvironment.js?v=180"
-    >
-
-    <link
-        rel="modulepreload"
-        href="./vendor/lights/RectAreaLightUniformsLib.js?v=180"
-    >
-
-    <link
-        rel="modulepreload"
-        href="./main.js?v=143"
-    >
-
-
-    <!-- =====================================================
-         PRELOAD RUG TEXTURES
-         ===================================================== -->
-
-    <link
-        rel="preload"
-        href="./textures/porphyra_color.png?v=143"
-        as="image"
-        fetchpriority="high"
-    >
-
-    <link
-        rel="preload"
-        href="./textures/porphyra_material.png?v=143"
-        as="image"
-        fetchpriority="high"
-    >
-
-    <link
-        rel="preload"
-        href="./textures/rug_normal.png?v=143"
-        as="image"
-        fetchpriority="high"
-    >
-
-
     <style>
-
         html,
         body {
             margin: 0;
@@ -90,74 +26,55 @@
 
             pointer-events: none;
         }
-
     </style>
-
 </head>
 
 
 <body>
 
-
 <script>
 
     // ======================================================
-    // PORPHYRA ASSET WARMER
+    // PORPHYRA v14.3 ASSET WARMER
     //
-    // Downloads but DOES NOT execute main.js.
-    // Does not create WebGL.
-    // Does not simulate the rug.
+    // Downloads the files needed by the rug into browser
+    // cache WITHOUT creating a WebGL renderer.
     // ======================================================
-
 
     const assets = [
 
         './main.js?v=143',
 
         './vendor/three.module.js?v=180',
+        './vendor/three.core.js',
 
         './vendor/environments/RoomEnvironment.js?v=180',
 
         './vendor/lights/RectAreaLightUniformsLib.js?v=180',
+        './vendor/lights/RectAreaLightTexturesLib.js',
 
         './textures/porphyra_color.png?v=143',
-
         './textures/porphyra_material.png?v=143',
-
         './textures/rug_normal.png?v=143'
 
     ];
 
 
-    async function warmAsset(
-        url
-    ) {
+    async function warmAsset(url) {
 
         try {
 
-            const response =
-
-                await fetch(
-
-                    url,
-
-                    {
-                        method:
-                            'GET',
-
-                        cache:
-                            'force-cache',
-
-                        credentials:
-                            'same-origin'
-                    }
-
-                );
+            const response = await fetch(
+                url,
+                {
+                    method: 'GET',
+                    cache: 'force-cache',
+                    credentials: 'same-origin'
+                }
+            );
 
 
-            if (
-                !response.ok
-            ) {
+            if (!response.ok) {
 
                 throw new Error(
                     `${response.status} ${response.statusText}`
@@ -166,27 +83,18 @@
             }
 
 
-            /*
-                Consume the response so the browser completes
-                the fetch rather than leaving the stream idle.
-            */
-
             await response.arrayBuffer();
-
 
             return true;
 
         }
-        catch (
-            error
-        ) {
+        catch (error) {
 
             console.warn(
                 'PORPHYRA warmup failed:',
                 url,
                 error
             );
-
 
             return false;
 
@@ -195,22 +103,13 @@
     }
 
 
-    const results =
-
-        await Promise.all(
-
-            assets.map(
-                warmAsset
-            )
-
-        );
+    const results = await Promise.all(
+        assets.map(warmAsset)
+    );
 
 
     const successful =
-
-        results.filter(
-            Boolean
-        ).length;
+        results.filter(Boolean).length;
 
 
     console.log(
@@ -219,23 +118,15 @@
 
 
     window.parent.postMessage(
-
         {
-            type:
-                'PORPHYRA_WARMUP_COMPLETE',
-
+            type: 'PORPHYRA_WARMUP_COMPLETE',
             successful,
-
-            total:
-                assets.length
+            total: assets.length
         },
-
         '*'
-
     );
 
 </script>
-
 
 </body>
 
