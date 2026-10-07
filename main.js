@@ -20,6 +20,7 @@ import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUnifo
 // RUG
 // ==========================================================
 
+
 const RUG_WIDTH = 9.4;
 const RUG_HEIGHT = 5.3;
 
