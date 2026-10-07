@@ -6,11 +6,15 @@ import {
 
 
 // ==========================================================
-// PORPHYRA — SPEED-SENSITIVE SMOOTH CLOTH
-// VERSION 6
+// PORPHYRA
+// INTERACTIVE CLOTH — VERSION 7
+//
+// v7:
+// - Faster cursor tracking
+// - Smooth speed-sensitive ripple physics
+// - Directional cloth folds
+// - Subtle lateral fabric dragging/bunching
 // ==========================================================
-
-const VERSION = 'v6';
 
 
 // ----------------------------------------------------------
@@ -39,7 +43,7 @@ const REPEAT_X =
 
 
 // ----------------------------------------------------------
-// CLOTH PHYSICS
+// MAIN CLOTH PHYSICS
 // ----------------------------------------------------------
 
 const TENSION = 0.26;
@@ -50,34 +54,41 @@ const DAMPING = 0.92;
 
 
 // ----------------------------------------------------------
-// POINTER SMOOTHING
+// POINTER TRACKING
 // ----------------------------------------------------------
 //
-// v6 CHANGE:
+// v6 = 30
 //
-// Was 18.
+// v7 = 38
 //
-// 30 makes the invisible physics cursor stay much closer
-// to the real mouse while retaining enough interpolation
-// to prevent the old slow-movement jitter.
+// This reduces the slight delayed feeling without making
+// the actual cloth motion stronger or more violent.
 // ----------------------------------------------------------
 
-const POINTER_FOLLOW_SPEED = 30;
+const POINTER_FOLLOW_SPEED = 38;
 
 
-// Keep speed smoothing slower.
+// Speed remains more heavily smoothed than position.
 //
-// This means:
+// So:
 //
-// position = responsive
-// effect strength = smooth
+// cursor location = responsive
+// cloth intensity = smooth
 //
-// That separation is important.
 const SPEED_SMOOTHING = 8;
 
 
+// Direction only updates once movement is meaningful.
+//
+// This prevents tiny slow mouse changes from causing
+// the fold direction itself to twitch.
+const DIRECTION_UPDATE_THRESHOLD = 0.28;
+
+const DIRECTION_FOLLOW_SPEED = 10;
+
+
 // ----------------------------------------------------------
-// SPEED-SENSITIVE CLOTH RESPONSE
+// SPEED RESPONSE
 // ----------------------------------------------------------
 
 const SPEED_DEADZONE = 0.12;
@@ -85,28 +96,94 @@ const SPEED_DEADZONE = 0.12;
 const SPEED_FULL_EFFECT = 5.0;
 
 
-// Slow movement
+// ----------------------------------------------------------
+// SLOW-MOUSE RESPONSE
+// ----------------------------------------------------------
+
 const MIN_BULGE = 0.045;
 
 const MIN_RADIUS = 0.55;
 
-const MIN_POINTER_STIFFNESS = 0.055;
+
+// Slightly higher than v6.
+//
+// This does NOT make the bulge larger.
+// It only makes the cloth reach the desired shape sooner.
+const MIN_POINTER_STIFFNESS = 0.070;
 
 
-// Fast movement
+// ----------------------------------------------------------
+// FAST-MOUSE RESPONSE
+// ----------------------------------------------------------
+
 const MAX_BULGE = 0.58;
 
 const MAX_RADIUS = 0.92;
 
-const MAX_POINTER_STIFFNESS = 0.16;
+const MAX_POINTER_STIFFNESS = 0.17;
 
 
-// Slow movement gets strong damping.
+// ----------------------------------------------------------
+// LOCAL DAMPING
+// ----------------------------------------------------------
+
 const SLOW_POINTER_DAMPING = 0.55;
 
-
-// Fast movement has more freedom to ripple.
 const FAST_POINTER_DAMPING = 0.16;
+
+
+// ----------------------------------------------------------
+// NEW — CLOTH FOLD SETTINGS
+// ----------------------------------------------------------
+//
+// These folds are layered over the underlying ripple
+// simulation.
+//
+// They do NOT replace the ripple physics.
+// ----------------------------------------------------------
+
+
+// Slow motion:
+// just a hint of gathered fabric.
+const MIN_FOLD_AMPLITUDE = 0.007;
+
+
+// Fast motion:
+// noticeable but still believable ridges.
+const MAX_FOLD_AMPLITUDE = 0.070;
+
+
+// Distance folds stretch along movement direction.
+const MIN_FOLD_LENGTH = 0.80;
+
+const MAX_FOLD_LENGTH = 1.60;
+
+
+// Width of the folded region.
+const MIN_FOLD_WIDTH = 0.42;
+
+const MAX_FOLD_WIDTH = 0.82;
+
+
+// Number of ridges across the cloth.
+const FOLD_FREQUENCY_1 = 7.0;
+
+const FOLD_FREQUENCY_2 = 4.2;
+
+
+// ----------------------------------------------------------
+// NEW — LATERAL FABRIC DRAG
+// ----------------------------------------------------------
+//
+// Real cloth doesn't only move toward/away from the camera.
+// It also bunches slightly in the direction it is disturbed.
+//
+// These values deliberately stay small.
+// ----------------------------------------------------------
+
+const MIN_DRAG_AMOUNT = 0.002;
+
+const MAX_DRAG_AMOUNT = 0.060;
 
 
 // ----------------------------------------------------------
@@ -126,6 +203,7 @@ let physicsAccumulator = 0;
 
 const scene =
     new THREE.Scene();
+
 
 scene.background =
     new THREE.Color(0x000000);
@@ -151,22 +229,30 @@ const camera =
 
 const renderer =
     new THREE.WebGLRenderer({
+
         antialias: true,
-        powerPreference: 'high-performance'
+
+        powerPreference:
+            'high-performance'
+
     });
 
 
 renderer.setPixelRatio(
+
     Math.min(
         window.devicePixelRatio,
         2
     )
+
 );
 
 
 renderer.setSize(
+
     window.innerWidth,
     window.innerHeight
+
 );
 
 
@@ -188,74 +274,13 @@ document.body.appendChild(
 
 
 // ----------------------------------------------------------
-// VERSION INDICATOR
-//
-// Created AFTER the WebGL canvas and given a very high
-// z-index so it cannot disappear behind the renderer.
-// ----------------------------------------------------------
-
-const versionIndicator =
-    document.createElement('div');
-
-
-versionIndicator.textContent =
-    `PORPHYRA CLOTH  •  ${VERSION}`;
-
-
-Object.assign(
-    versionIndicator.style,
-    {
-        position: 'fixed',
-
-        top: '12px',
-        left: '12px',
-
-        zIndex: '999999',
-
-        padding: '7px 10px',
-
-        color: '#ffffff',
-
-        background:
-            'rgba(0, 0, 0, 0.72)',
-
-        border:
-            '1px solid rgba(255,255,255,0.22)',
-
-        borderRadius: '5px',
-
-        fontFamily:
-            'Arial, Helvetica, sans-serif',
-
-        fontSize: '11px',
-
-        fontWeight: '600',
-
-        letterSpacing: '0.12em',
-
-        lineHeight: '1',
-
-        pointerEvents: 'none',
-
-        userSelect: 'none',
-
-        boxShadow:
-            '0 2px 8px rgba(0,0,0,0.4)'
-    }
-);
-
-
-document.body.appendChild(
-    versionIndicator
-);
-
-
-// ----------------------------------------------------------
-// ENVIRONMENT LIGHTING
+// ENVIRONMENT
 // ----------------------------------------------------------
 
 const pmrem =
-    new THREE.PMREMGenerator(renderer);
+    new THREE.PMREMGenerator(
+        renderer
+    );
 
 
 const room =
@@ -274,6 +299,7 @@ scene.environment =
 
 
 room.dispose();
+
 pmrem.dispose();
 
 
@@ -295,7 +321,9 @@ keyLight.position.set(
 );
 
 
-scene.add(keyLight);
+scene.add(
+    keyLight
+);
 
 
 const fillLight =
@@ -312,7 +340,9 @@ fillLight.position.set(
 );
 
 
-scene.add(fillLight);
+scene.add(
+    fillLight
+);
 
 
 // ----------------------------------------------------------
@@ -337,6 +367,7 @@ function configureTexture(texture) {
     texture.wrapS =
         THREE.RepeatWrapping;
 
+
     texture.wrapT =
         THREE.RepeatWrapping;
 
@@ -355,12 +386,14 @@ function configureTexture(texture) {
     texture.minFilter =
         THREE.LinearMipmapLinearFilter;
 
+
     texture.magFilter =
         THREE.LinearFilter;
 
 
     texture.generateMipmaps =
         true;
+
 
     texture.needsUpdate =
         true;
@@ -373,15 +406,23 @@ function configureTexture(texture) {
 // ----------------------------------------------------------
 
 let rug;
+
 let geometry;
+
 let positions;
 
+
 let height;
+
 let velocity;
+
 let acceleration;
 
+
 let restX;
+
 let restY;
+
 let restZ;
 
 
@@ -420,10 +461,7 @@ function lerp(a, b, t) {
 
     return (
         a +
-        (
-            b - a
-        ) *
-        t
+        (b - a) * t
     );
 
 }
@@ -431,51 +469,66 @@ function lerp(a, b, t) {
 
 function smoothstep01(t) {
 
-    t = clamp01(t);
+    t =
+        clamp01(t);
+
 
     return (
+
         t *
         t *
         (
             3 -
             2 * t
         )
+
     );
 
 }
 
 
 // ----------------------------------------------------------
-// RESTING CLOTH SHAPE
+// STATIC RESTING CLOTH
 // ----------------------------------------------------------
 
 function restingHeight(x, y) {
 
     const wave1 =
+
         Math.sin(
+
             x * 1.15 +
             y * 0.40
+
         ) * 0.025;
 
 
     const wave2 =
+
         Math.sin(
+
             x * 2.5 -
             y * 1.25
+
         ) * 0.012;
 
 
     const wave3 =
+
         Math.sin(
+
             y * 3.4 +
             x * 0.7
+
         ) * 0.006;
 
 
     return (
+
         wave1 +
         wave2 +
         wave3
+
     );
 
 }
@@ -498,30 +551,38 @@ function initializeClothPhysics() {
     height =
         new Float32Array(count);
 
+
     velocity =
         new Float32Array(count);
+
 
     acceleration =
         new Float32Array(count);
 
+
     restX =
         new Float32Array(count);
 
+
     restY =
         new Float32Array(count);
+
 
     restZ =
         new Float32Array(count);
 
 
     for (
+
         let i = 0;
         i < count;
         i++
+
     ) {
 
         const x =
             positions.getX(i);
+
 
         const y =
             positions.getY(i);
@@ -560,7 +621,7 @@ function initializeClothPhysics() {
 
 
 // ----------------------------------------------------------
-// POINTER
+// POINTER SYSTEM
 // ----------------------------------------------------------
 
 const pointerNDC =
@@ -573,12 +634,15 @@ const raycaster =
 
 const interactionPlane =
     new THREE.Plane(
+
         new THREE.Vector3(
             0,
             0,
             1
         ),
+
         0
+
     );
 
 
@@ -586,80 +650,112 @@ const intersection =
     new THREE.Vector3();
 
 
-let pointerActive = false;
+let pointerActive =
+    false;
 
 
-// Real mouse position.
+// Actual browser cursor.
 let targetPointerX = 0;
 
 let targetPointerY = 0;
 
 
-// Physics interaction position.
+// Physics cursor.
 let smoothPointerX = 0;
 
 let smoothPointerY = 0;
 
 
-// Used to calculate stable movement speed.
+// Previous physics cursor.
 let previousSmoothPointerX = 0;
 
 let previousSmoothPointerY = 0;
 
 
+// Smoothed cursor speed.
 let smoothPointerSpeed = 0;
 
 
-let hasSmoothPointer = false;
+// Smoothed direction of travel.
+let motionDirX = 1;
+
+let motionDirY = 0;
+
+
+let hasSmoothPointer =
+    false;
+
+
+// Used for fading the extra folds when cursor exits.
+let interactionPresence = 0;
+
+
+// Current speed strength used by visual folds.
+let visualSpeed01 = 0;
 
 
 // ----------------------------------------------------------
-// BROWSER POINTER MOVE
+// POINTER MOVE
 // ----------------------------------------------------------
 
 function onPointerMove(event) {
 
     const rect =
+
         renderer.domElement
             .getBoundingClientRect();
 
 
     pointerNDC.x =
+
         (
             (
                 event.clientX -
                 rect.left
-            ) /
+            )
+            /
             rect.width
-        ) * 2 - 1;
+        )
+        * 2
+        - 1;
 
 
     pointerNDC.y =
+
         -(
             (
                 event.clientY -
                 rect.top
-            ) /
+            )
+            /
             rect.height
-        ) * 2 + 1;
+        )
+        * 2
+        + 1;
 
 
     raycaster.setFromCamera(
+
         pointerNDC,
         camera
+
     );
 
 
     const hit =
+
         raycaster.ray.intersectPlane(
+
             interactionPlane,
             intersection
+
         );
 
 
     if (!hit) {
 
-        pointerActive = false;
+        pointerActive =
+            false;
 
         return;
 
@@ -667,20 +763,26 @@ function onPointerMove(event) {
 
 
     const inside =
+
         Math.abs(
             intersection.x
-        ) <= RUG_WIDTH / 2
+        )
+        <=
+        RUG_WIDTH / 2
 
         &&
 
         Math.abs(
             intersection.y
-        ) <= RUG_HEIGHT / 2;
+        )
+        <=
+        RUG_HEIGHT / 2;
 
 
     if (!inside) {
 
-        pointerActive = false;
+        pointerActive =
+            false;
 
         return;
 
@@ -731,24 +833,33 @@ function onPointerMove(event) {
 
 function onPointerLeave() {
 
-    pointerActive = false;
+    pointerActive =
+        false;
 
-    hasSmoothPointer = false;
 
-    smoothPointerSpeed = 0;
+    hasSmoothPointer =
+        false;
+
+
+    smoothPointerSpeed =
+        0;
 
 }
 
 
 renderer.domElement.addEventListener(
+
     'pointermove',
     onPointerMove
+
 );
 
 
 renderer.domElement.addEventListener(
+
     'pointerleave',
     onPointerLeave
+
 );
 
 
@@ -758,12 +869,45 @@ renderer.domElement.addEventListener(
 
 function updateSmoothPointer(dt) {
 
+    const presenceTarget =
+        pointerActive
+            ? 1
+            : 0;
+
+
+    const presenceFollow =
+
+        1 -
+        Math.exp(
+            -10 * dt
+        );
+
+
+    interactionPresence +=
+
+        (
+            presenceTarget -
+            interactionPresence
+        )
+        *
+        presenceFollow;
+
+
     if (!pointerActive) {
 
         smoothPointerSpeed *=
+
             Math.exp(
                 -10 * dt
             );
+
+
+        visualSpeed01 *=
+
+            Math.exp(
+                -7 * dt
+            );
+
 
         return;
 
@@ -771,64 +915,86 @@ function updateSmoothPointer(dt) {
 
 
     // ------------------------------------------------------
-    // POSITION FOLLOWING
-    //
-    // v6:
-    // Much faster than v5 so deformation stays closer
-    // to the visible cursor.
+    // POSITION
     // ------------------------------------------------------
 
     const follow =
+
         1 -
         Math.exp(
+
             -POINTER_FOLLOW_SPEED *
             dt
+
         );
 
 
     smoothPointerX +=
+
         (
             targetPointerX -
             smoothPointerX
-        ) *
+        )
+        *
         follow;
 
 
     smoothPointerY +=
+
         (
             targetPointerY -
             smoothPointerY
-        ) *
+        )
+        *
         follow;
 
 
     // ------------------------------------------------------
-    // SPEED CALCULATION
-    //
-    // Still based on the smoothed physics cursor.
-    //
-    // This keeps the response calm even though the
-    // POSITION itself now follows faster.
+    // VELOCITY
     // ------------------------------------------------------
 
     const dx =
+
         smoothPointerX -
         previousSmoothPointerX;
 
 
     const dy =
+
         smoothPointerY -
         previousSmoothPointerY;
 
 
-    const instantaneousSpeed =
-        Math.sqrt(
-            dx * dx +
-            dy * dy
-        ) /
+    const instantaneousVX =
+
+        dx /
         Math.max(
             dt,
             0.0001
+        );
+
+
+    const instantaneousVY =
+
+        dy /
+        Math.max(
+            dt,
+            0.0001
+        );
+
+
+    const instantaneousSpeed =
+
+        Math.sqrt(
+
+            instantaneousVX *
+            instantaneousVX
+
+            +
+
+            instantaneousVY *
+            instantaneousVY
+
         );
 
 
@@ -840,35 +1006,139 @@ function updateSmoothPointer(dt) {
         smoothPointerY;
 
 
+    // ------------------------------------------------------
+    // SPEED SMOOTHING
+    // ------------------------------------------------------
+
     const speedFollow =
+
         1 -
         Math.exp(
+
             -SPEED_SMOOTHING *
             dt
+
         );
 
 
     smoothPointerSpeed +=
+
         (
             instantaneousSpeed -
             smoothPointerSpeed
-        ) *
+        )
+        *
         speedFollow;
+
+
+    // ------------------------------------------------------
+    // DIRECTION SMOOTHING
+    //
+    // Only change fold direction if movement is large
+    // enough to provide a stable direction.
+    // ------------------------------------------------------
+
+    if (
+
+        instantaneousSpeed >
+        DIRECTION_UPDATE_THRESHOLD
+
+    ) {
+
+        const targetDirX =
+
+            instantaneousVX /
+            instantaneousSpeed;
+
+
+        const targetDirY =
+
+            instantaneousVY /
+            instantaneousSpeed;
+
+
+        const directionFollow =
+
+            1 -
+            Math.exp(
+
+                -DIRECTION_FOLLOW_SPEED *
+                dt
+
+            );
+
+
+        motionDirX +=
+
+            (
+                targetDirX -
+                motionDirX
+            )
+            *
+            directionFollow;
+
+
+        motionDirY +=
+
+            (
+                targetDirY -
+                motionDirY
+            )
+            *
+            directionFollow;
+
+
+        const directionLength =
+
+            Math.sqrt(
+
+                motionDirX *
+                motionDirX
+
+                +
+
+                motionDirY *
+                motionDirY
+
+            );
+
+
+        if (
+
+            directionLength >
+            0.0001
+
+        ) {
+
+            motionDirX /=
+                directionLength;
+
+
+            motionDirY /=
+                directionLength;
+
+        }
+
+    }
 
 }
 
 
 // ----------------------------------------------------------
-// SPEED → CLOTH RESPONSE
+// SPEED → INTERACTION
 // ----------------------------------------------------------
 
 function getPointerEffect() {
 
     const normalizedSpeed =
+
         (
             smoothPointerSpeed -
             SPEED_DEADZONE
-        ) /
+        )
+
+        /
+
         (
             SPEED_FULL_EFFECT -
             SPEED_DEADZONE
@@ -876,64 +1146,84 @@ function getPointerEffect() {
 
 
     let speed01 =
+
         smoothstep01(
             normalizedSpeed
         );
 
 
-    // Keeps subtle mouse motion especially gentle.
+    // Make low speeds especially subtle.
     speed01 =
+
         Math.pow(
             speed01,
             1.35
         );
 
 
+    visualSpeed01 =
+        speed01;
+
+
     const bulge =
+
         lerp(
+
             MIN_BULGE,
             MAX_BULGE,
             speed01
+
         );
 
 
     const radius =
+
         lerp(
+
             MIN_RADIUS,
             MAX_RADIUS,
             speed01
+
         );
 
 
     const stiffness =
+
         lerp(
+
             MIN_POINTER_STIFFNESS,
             MAX_POINTER_STIFFNESS,
             speed01
+
         );
 
 
     const localDamping =
+
         lerp(
+
             SLOW_POINTER_DAMPING,
             FAST_POINTER_DAMPING,
             speed01
+
         );
 
 
     return {
+
         speed01,
         bulge,
         radius,
         stiffness,
         localDamping
+
     };
 
 }
 
 
 // ----------------------------------------------------------
-// PHYSICS STEP
+// PHYSICS
 // ----------------------------------------------------------
 
 function simulateCloth(dt) {
@@ -949,23 +1239,30 @@ function simulateCloth(dt) {
 
 
     // ------------------------------------------------------
-    // NEIGHBOR SPRINGS
+    // RIPPLE / NEIGHBOR SPRINGS
     // ------------------------------------------------------
 
     for (
+
         let y = 1;
         y < ROWS - 1;
         y++
+
     ) {
 
         for (
+
             let x = 1;
             x < COLS - 1;
             x++
+
         ) {
 
             const i =
-                indexOf(x, y);
+                indexOf(
+                    x,
+                    y
+                );
 
 
             const left =
@@ -997,23 +1294,29 @@ function simulateCloth(dt) {
 
 
             const neighborAverage =
+
                 (
                     height[left] +
                     height[right] +
                     height[down] +
                     height[up]
-                ) * 0.25;
+                )
+                *
+                0.25;
 
 
             acceleration[i] +=
+
                 (
                     neighborAverage -
                     height[i]
-                ) *
+                )
+                *
                 TENSION;
 
 
             acceleration[i] +=
+
                 -height[i] *
                 RESTORE_FORCE;
 
@@ -1027,8 +1330,10 @@ function simulateCloth(dt) {
     // ------------------------------------------------------
 
     if (
+
         pointerActive &&
         hasSmoothPointer
+
     ) {
 
         const effect =
@@ -1036,53 +1341,68 @@ function simulateCloth(dt) {
 
 
         const radiusSquared =
+
             effect.radius *
             effect.radius;
 
 
         for (
+
             let y = 1;
             y < ROWS - 1;
             y++
+
         ) {
 
             for (
+
                 let x = 1;
                 x < COLS - 1;
                 x++
+
             ) {
 
                 const i =
-                    indexOf(x, y);
+                    indexOf(
+                        x,
+                        y
+                    );
 
 
                 const dx =
+
                     restX[i] -
                     smoothPointerX;
 
 
                 const dy =
+
                     restY[i] -
                     smoothPointerY;
 
 
                 const distanceSquared =
+
                     dx * dx +
                     dy * dy;
 
 
                 if (
+
                     distanceSquared <
                     radiusSquared
+
                 ) {
 
                     const distance =
+
                         Math.sqrt(
                             distanceSquared
                         );
 
 
                     let influence =
+
                         1 -
                         (
                             distance /
@@ -1091,29 +1411,32 @@ function simulateCloth(dt) {
 
 
                     influence =
+
                         smoothstep01(
                             influence
                         );
 
 
                     const targetHeight =
+
                         effect.bulge *
                         influence;
 
 
                     const error =
+
                         targetHeight -
                         height[i];
 
 
-                    // Pull cloth toward mouse-driven shape.
                     acceleration[i] +=
+
                         error *
                         effect.stiffness;
 
 
-                    // Absorb rapid oscillation under cursor.
                     acceleration[i] -=
+
                         velocity[i] *
                         effect.localDamping *
                         influence;
@@ -1128,10 +1451,11 @@ function simulateCloth(dt) {
 
 
     // ------------------------------------------------------
-    // INTEGRATION
+    // INTEGRATE
     // ------------------------------------------------------
 
     const frameDamping =
+
         Math.pow(
             DAMPING,
             step
@@ -1139,22 +1463,30 @@ function simulateCloth(dt) {
 
 
     for (
+
         let y = 1;
         y < ROWS - 1;
         y++
+
     ) {
 
         for (
+
             let x = 1;
             x < COLS - 1;
             x++
+
         ) {
 
             const i =
-                indexOf(x, y);
+                indexOf(
+                    x,
+                    y
+                );
 
 
             velocity[i] +=
+
                 acceleration[i] *
                 step;
 
@@ -1164,6 +1496,7 @@ function simulateCloth(dt) {
 
 
             height[i] +=
+
                 velocity[i] *
                 step;
 
@@ -1173,17 +1506,22 @@ function simulateCloth(dt) {
 
 
     // ------------------------------------------------------
-    // PIN EDGES
+    // PIN BORDERS
     // ------------------------------------------------------
 
     for (
+
         let x = 0;
         x < COLS;
         x++
+
     ) {
 
         const bottom =
-            indexOf(x, 0);
+            indexOf(
+                x,
+                0
+            );
 
 
         const top =
@@ -1194,23 +1532,30 @@ function simulateCloth(dt) {
 
 
         height[bottom] = 0;
+
         velocity[bottom] = 0;
 
 
         height[top] = 0;
+
         velocity[top] = 0;
 
     }
 
 
     for (
+
         let y = 0;
         y < ROWS;
         y++
+
     ) {
 
         const left =
-            indexOf(0, y);
+            indexOf(
+                0,
+                y
+            );
 
 
         const right =
@@ -1221,10 +1566,12 @@ function simulateCloth(dt) {
 
 
         height[left] = 0;
+
         velocity[left] = 0;
 
 
         height[right] = 0;
+
         velocity[right] = 0;
 
     }
@@ -1233,21 +1580,339 @@ function simulateCloth(dt) {
 
 
 // ----------------------------------------------------------
-// UPDATE GEOMETRY
+// UPDATE VISUAL CLOTH GEOMETRY
+//
+// This combines:
+//
+// 1. underlying spring/ripple physics
+// 2. large directional folds
+// 3. smaller secondary wrinkles
+// 4. subtle sideways bunching
 // ----------------------------------------------------------
 
 function updateGeometry() {
 
+    const speed01 =
+        visualSpeed01;
+
+
+    const foldAmplitude =
+
+        lerp(
+
+            MIN_FOLD_AMPLITUDE,
+            MAX_FOLD_AMPLITUDE,
+            speed01
+
+        )
+        *
+        interactionPresence;
+
+
+    const foldLength =
+
+        lerp(
+
+            MIN_FOLD_LENGTH,
+            MAX_FOLD_LENGTH,
+            speed01
+
+        );
+
+
+    const foldWidth =
+
+        lerp(
+
+            MIN_FOLD_WIDTH,
+            MAX_FOLD_WIDTH,
+            speed01
+
+        );
+
+
+    const dragAmount =
+
+        lerp(
+
+            MIN_DRAG_AMOUNT,
+            MAX_DRAG_AMOUNT,
+            speed01
+
+        )
+        *
+        interactionPresence;
+
+
+    const halfWidth =
+        RUG_WIDTH / 2;
+
+
+    const halfHeight =
+        RUG_HEIGHT / 2;
+
+
     for (
+
         let i = 0;
         i < positions.count;
         i++
+
     ) {
 
-        positions.setZ(
+        const baseX =
+            restX[i];
+
+
+        const baseY =
+            restY[i];
+
+
+        let finalX =
+            baseX;
+
+
+        let finalY =
+            baseY;
+
+
+        let foldZ =
+            0;
+
+
+        // --------------------------------------------------
+        // EDGE FADE
+        //
+        // Keeps the outer border stable while the interior
+        // gathers and folds.
+        // --------------------------------------------------
+
+        const edgeDistanceX =
+
+            halfWidth -
+            Math.abs(baseX);
+
+
+        const edgeDistanceY =
+
+            halfHeight -
+            Math.abs(baseY);
+
+
+        const edgeFade =
+
+            smoothstep01(
+
+                Math.min(
+
+                    edgeDistanceX /
+                    0.45,
+
+                    edgeDistanceY /
+                    0.45
+
+                )
+
+            );
+
+
+        if (
+
+            interactionPresence >
+            0.001
+
+        ) {
+
+            const dx =
+
+                baseX -
+                smoothPointerX;
+
+
+            const dy =
+
+                baseY -
+                smoothPointerY;
+
+
+            // ------------------------------------------------
+            // ROTATE INTO CURSOR-MOTION SPACE
+            //
+            // "along" = parallel to mouse movement
+            //
+            // "across" = perpendicular to movement
+            // ------------------------------------------------
+
+            const along =
+
+                dx * motionDirX +
+                dy * motionDirY;
+
+
+            const across =
+
+                -dx * motionDirY +
+                dy * motionDirX;
+
+
+            // Fabric trails farther behind the moving cursor.
+            const directionalLength =
+
+                along < 0
+
+                    ? foldLength * 1.25
+
+                    : foldLength * 0.78;
+
+
+            // ------------------------------------------------
+            // ELLIPTICAL FOLD REGION
+            // ------------------------------------------------
+
+            const envelope =
+
+                Math.exp(
+
+                    -(
+
+                        (
+                            along *
+                            along
+                        )
+                        /
+                        (
+                            2 *
+                            directionalLength *
+                            directionalLength
+                        )
+
+                        +
+
+                        (
+                            across *
+                            across
+                        )
+                        /
+                        (
+                            2 *
+                            foldWidth *
+                            foldWidth
+                        )
+
+                    )
+
+                );
+
+
+            // ------------------------------------------------
+            // PRIMARY LONG FOLDS
+            //
+            // These form ridges largely parallel to travel.
+            // ------------------------------------------------
+
+            const fold1 =
+
+                Math.sin(
+
+                    across *
+                    FOLD_FREQUENCY_1
+
+                    +
+
+                    along *
+                    0.75
+
+                );
+
+
+            // ------------------------------------------------
+            // SECONDARY BROADER FOLDS
+            //
+            // Stops everything from looking like equally
+            // spaced waves.
+            // ------------------------------------------------
+
+            const fold2 =
+
+                Math.sin(
+
+                    across *
+                    FOLD_FREQUENCY_2
+
+                    -
+
+                    along *
+                    1.35
+
+                    +
+
+                    0.85
+
+                );
+
+
+            const combinedFold =
+
+                (
+                    fold1 * 0.68 +
+                    fold2 * 0.32
+                );
+
+
+            foldZ =
+
+                combinedFold *
+                foldAmplitude *
+                envelope *
+                edgeFade;
+
+
+            // ------------------------------------------------
+            // LATERAL CLOTH DRAG
+            //
+            // The material moves very slightly WITH the
+            // cursor, producing bunching instead of only
+            // moving toward the camera.
+            // ------------------------------------------------
+
+            const dragEnvelope =
+
+                envelope *
+                edgeFade;
+
+
+            finalX +=
+
+                motionDirX *
+                dragAmount *
+                dragEnvelope;
+
+
+            finalY +=
+
+                motionDirY *
+                dragAmount *
+                dragEnvelope;
+
+        }
+
+
+        // --------------------------------------------------
+        // FINAL POSITION
+        // --------------------------------------------------
+
+        positions.setXYZ(
+
             i,
+
+            finalX,
+
+            finalY,
+
             restZ[i] +
-            height[i]
+            height[i] +
+            foldZ
+
         );
 
     }
@@ -1257,6 +1922,7 @@ function updateGeometry() {
         true;
 
 
+    // Lighting follows the REAL folded geometry.
     geometry.computeVertexNormals();
 
 }
@@ -1269,8 +1935,10 @@ function updateGeometry() {
 async function createRug() {
 
     const [
+
         baseColor,
         normalMap
+
     ] = await Promise.all([
 
         loadTexture(
@@ -1303,15 +1971,20 @@ async function createRug() {
 
 
     geometry =
+
         new THREE.PlaneGeometry(
+
             RUG_WIDTH,
             RUG_HEIGHT,
+
             SEGMENTS_X,
             SEGMENTS_Y
+
         );
 
 
     const material =
+
         new THREE.MeshPhysicalMaterial({
 
             map:
@@ -1367,17 +2040,23 @@ async function createRug() {
 
             side:
                 THREE.DoubleSide
+
         });
 
 
     rug =
+
         new THREE.Mesh(
+
             geometry,
             material
+
         );
 
 
-    scene.add(rug);
+    scene.add(
+        rug
+    );
 
 
     initializeClothPhysics();
@@ -1390,12 +2069,13 @@ async function createRug() {
 
 
 // ----------------------------------------------------------
-// CAMERA
+// CAMERA FIT
 // ----------------------------------------------------------
 
 function fitCamera() {
 
     camera.aspect =
+
         window.innerWidth /
         window.innerHeight;
 
@@ -1404,39 +2084,58 @@ function fitCamera() {
 
 
     const fov =
+
         THREE.MathUtils.degToRad(
             camera.fov
         );
 
 
     const distanceForHeight =
-        (RUG_HEIGHT / 2) /
+
+        (RUG_HEIGHT / 2)
+
+        /
+
         Math.tan(
             fov / 2
         );
 
 
     const distanceForWidth =
-        (RUG_WIDTH / 2) /
+
+        (RUG_WIDTH / 2)
+
+        /
+
         (
+
             Math.tan(
                 fov / 2
-            ) *
+            )
+
+            *
+
             camera.aspect
+
         );
 
 
     const distance =
+
         Math.max(
+
             distanceForHeight,
             distanceForWidth
+
         );
 
 
     camera.position.set(
+
         0,
         0,
         distance * 1.12
+
     );
 
 
@@ -1454,26 +2153,35 @@ function fitCamera() {
 // ----------------------------------------------------------
 
 window.addEventListener(
+
     'resize',
+
     () => {
 
         renderer.setPixelRatio(
+
             Math.min(
+
                 window.devicePixelRatio,
                 2
+
             )
+
         );
 
 
         renderer.setSize(
+
             window.innerWidth,
             window.innerHeight
+
         );
 
 
         fitCamera();
 
     }
+
 );
 
 
@@ -1482,12 +2190,14 @@ window.addEventListener(
 // ----------------------------------------------------------
 
 const loading =
+
     document.getElementById(
         'loading'
     );
 
 
 const errorBox =
+
     document.getElementById(
         'error'
     );
@@ -1507,12 +2217,15 @@ try {
 
 
     console.log(
-        `PORPHYRA Cloth ${VERSION} loaded`
+        'PORPHYRA Cloth v7 loaded'
     );
 
-} catch (error) {
+}
+catch (error) {
 
-    console.error(error);
+    console.error(
+        error
+    );
 
 
     loading.classList.add(
@@ -1539,12 +2252,16 @@ const clock =
 
 
 renderer.setAnimationLoop(
+
     () => {
 
         const frameTime =
+
             Math.min(
+
                 clock.getDelta(),
                 0.05
+
             );
 
 
@@ -1552,10 +2269,12 @@ renderer.setAnimationLoop(
             frameTime;
 
 
-        let substeps = 0;
+        let substeps =
+            0;
 
 
         while (
+
             physicsAccumulator >=
                 FIXED_TIMESTEP
 
@@ -1563,6 +2282,7 @@ renderer.setAnimationLoop(
 
             substeps <
                 MAX_SUBSTEPS
+
         ) {
 
             simulateCloth(
@@ -1580,11 +2300,14 @@ renderer.setAnimationLoop(
 
 
         if (
+
             substeps ===
             MAX_SUBSTEPS
+
         ) {
 
-            physicsAccumulator = 0;
+            physicsAccumulator =
+                0;
 
         }
 
@@ -1597,9 +2320,12 @@ renderer.setAnimationLoop(
 
 
         renderer.render(
+
             scene,
             camera
+
         );
 
     }
+
 );
