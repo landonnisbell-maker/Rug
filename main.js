@@ -3,16 +3,16 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 
 // ==========================================================
-// PORPHYRA — INTERACTIVE CLOTH v11.4
+// PORPHYRA — INTERACTIVE CLOTH v11.5
 //
-// SIDE SELVAGE + REALISTIC FRAY
+// SOFT ALPHA FRAY SIDES
 //
-// Changes from v11.3:
-// - removes decorative tassels/fringe from all four sides
-// - adds a narrow woven selvage band ONLY on left/right sides
-// - adds many short, irregular broken fibers along those sides
-// - no boxy thickness, no backside mesh, no forced camera angle
-// - keeps cinematic lighting, silk shading, fold occlusion, physics
+// Changes:
+// - removes spiky strand fringe geometry
+// - removes fake box thickness look
+// - adds subtle woven side selvage
+// - adds soft alpha-based fuzzy frayed edge strips
+// - keeps cinematic lighting, silk shading, fold occlusion
 // ==========================================================
 
 
@@ -31,55 +31,25 @@ const ROWS = SEGMENTS_Y + 1;
 
 
 // ==========================================================
-// SIDE SELVAGE / FRAY — v11.4
+// SIDE EDGE DETAIL SETTINGS
 // ==========================================================
 
-// Narrow woven strip like the bound/selvage edge in your reference.
-const SIDE_BAND_COLOR =
-    new THREE.Color(
-        0x68463f
-    );
+// Narrow woven side band
+const SELVAGE_WIDTH = 0.070;
+const SELVAGE_COLOR = new THREE.Color(0x8c7669);
+const SELVAGE_Z_LIFT = 0.0014;
 
-const SIDE_BAND_WIDTH = 0.075;
+// Soft fuzzy fray strip
+const FRAY_STRIP_WIDTH = 0.175;
+const FRAY_ATTACH_OUTSET = 0.004;
+const FRAY_OUTER_DROOP = 0.010;
+const FRAY_Z_SINK = 0.002;
 
-const SIDE_BAND_OVERLAP = 0.008;
+const FRAY_COLOR = new THREE.Color(0xe8dbc7);
 
-const SIDE_BAND_Z_SINK_INNER = 0.0015;
-
-const SIDE_BAND_Z_SINK_OUTER = 0.0045;
-
-
-// Dense, short, irregular broken fibers outside the band.
-const SIDE_FRAY_COLOR =
-    new THREE.Color(
-        0xe3d8c7
-    );
-
-const SIDE_FRAY_STRANDS_PER_SIDE = 220;
-
-const SIDE_FRAY_MIN_LENGTH = 0.010;
-
-const SIDE_FRAY_MAX_LENGTH = 0.072;
-
-const SIDE_FRAY_MIN_WIDTH = 0.0025;
-
-const SIDE_FRAY_MAX_WIDTH = 0.0100;
-
-const SIDE_FRAY_BASE_OVERLAP = 0.004;
-
-const SIDE_FRAY_Y_JITTER = 0.024;
-
-const SIDE_FRAY_TIP_Y_SWAY = 0.035;
-
-const SIDE_FRAY_Z_JITTER = 0.008;
-
-const SIDE_FRAY_TIP_SINK = 0.006;
-
-
-// Some strands are intentionally tiny so the edge has broken gaps.
-const SIDE_FRAY_GAP_CHANCE = 0.14;
-
-const SIDE_FRAY_GAP_LENGTH_SCALE = 0.18;
+// small irregular movement so the fray edge is not perfectly straight
+const FRAY_WAVE_AMPLITUDE = 0.012;
+const FRAY_WAVE_FREQ = 0.12;
 
 
 // ==========================================================
@@ -87,13 +57,7 @@ const SIDE_FRAY_GAP_LENGTH_SCALE = 0.18;
 // ==========================================================
 
 const REPEAT_Y = 1.6;
-
-const REPEAT_X =
-    REPEAT_Y *
-    (
-        RUG_WIDTH /
-        RUG_HEIGHT
-    );
+const REPEAT_X = REPEAT_Y * (RUG_WIDTH / RUG_HEIGHT);
 
 
 // ==========================================================
@@ -101,19 +65,14 @@ const REPEAT_X =
 // ==========================================================
 
 const COLOR_MASK_STRENGTH = 0.42;
-
 const MAX_METALNESS = 0.14;
-
 const MIN_SILK_ROUGHNESS = 0.40;
-
 const MAX_SILK_ROUGHNESS = 0.72;
 
 const SILK_ANISOTROPY = 0.68;
-
 const SILK_ANISOTROPY_ROTATION = 0.0;
 
 const SILK_SHEEN = 0.82;
-
 const SILK_SHEEN_ROUGHNESS = 0.48;
 
 const ENVIRONMENT_INTENSITY = 0.22;
@@ -124,11 +83,8 @@ const ENVIRONMENT_INTENSITY = 0.22;
 // ==========================================================
 
 const VALLEY_DARKEN_STRENGTH = 0.28;
-
 const CREST_LIGHTEN_STRENGTH = 0.02;
-
 const CURVATURE_START = 0.010;
-
 const CURVATURE_END = 0.060;
 
 
@@ -137,57 +93,41 @@ const CURVATURE_END = 0.060;
 // ==========================================================
 
 const TENSION = 0.26;
-
 const RESTORE_FORCE = 0.035;
-
 const DAMPING = 0.92;
 
 const POINTER_FOLLOW_SPEED = 38;
-
 const SPEED_SMOOTHING = 8;
-
 const DIRECTION_UPDATE_THRESHOLD = 0.28;
-
 const DIRECTION_FOLLOW_SPEED = 10;
 
 const SPEED_DEADZONE = 0.12;
-
 const SPEED_FULL_EFFECT = 5.0;
 
 const MIN_BULGE = 0.045;
-
 const MIN_RADIUS = 0.55;
-
 const MIN_POINTER_STIFFNESS = 0.070;
 
 const MAX_BULGE = 0.58;
-
 const MAX_RADIUS = 0.92;
-
 const MAX_POINTER_STIFFNESS = 0.17;
 
 const SLOW_POINTER_DAMPING = 0.55;
-
 const FAST_POINTER_DAMPING = 0.16;
 
 const MIN_FOLD_AMPLITUDE = 0.007;
-
 const MAX_FOLD_AMPLITUDE = 0.070;
 
 const MIN_FOLD_LENGTH = 0.80;
-
 const MAX_FOLD_LENGTH = 1.60;
 
 const MIN_FOLD_WIDTH = 0.42;
-
 const MAX_FOLD_WIDTH = 0.82;
 
 const FOLD_FREQUENCY_1 = 7.0;
-
 const FOLD_FREQUENCY_2 = 4.2;
 
 const MIN_DRAG_AMOUNT = 0.002;
-
 const MAX_DRAG_AMOUNT = 0.060;
 
 
@@ -195,142 +135,64 @@ const MAX_DRAG_AMOUNT = 0.060;
 // FIXED PHYSICS TIMESTEP
 // ==========================================================
 
-const FIXED_TIMESTEP =
-    1 / 120;
-
-const MAX_SUBSTEPS =
-    5;
-
-let physicsAccumulator =
-    0;
+const FIXED_TIMESTEP = 1 / 120;
+const MAX_SUBSTEPS = 5;
+let physicsAccumulator = 0;
 
 
 // ==========================================================
 // SCENE
 // ==========================================================
 
-const scene =
-    new THREE.Scene();
-
-scene.background =
-    new THREE.Color(
-        0x000000
-    );
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
 
 
 // ==========================================================
 // CAMERA
 // ==========================================================
 
-const camera =
-    new THREE.PerspectiveCamera(
-
-        32,
-
-        window.innerWidth /
-        window.innerHeight,
-
-        0.1,
-
-        100
-
-    );
+const camera = new THREE.PerspectiveCamera(
+    32,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    100
+);
 
 
 // ==========================================================
 // RENDERER
 // ==========================================================
 
-const renderer =
-    new THREE.WebGLRenderer({
+const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: 'high-performance'
+});
 
-        antialias:
-            true,
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.76;
 
-        powerPreference:
-            'high-performance'
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = true;
 
-    });
-
-
-renderer.setPixelRatio(
-
-    Math.min(
-
-        window.devicePixelRatio,
-
-        2
-
-    )
-
-);
-
-
-renderer.setSize(
-
-    window.innerWidth,
-
-    window.innerHeight
-
-);
-
-
-renderer.outputColorSpace =
-    THREE.SRGBColorSpace;
-
-
-renderer.toneMapping =
-    THREE.ACESFilmicToneMapping;
-
-
-renderer.toneMappingExposure =
-    0.76;
-
-
-renderer.shadowMap.enabled =
-    true;
-
-
-renderer.shadowMap.type =
-    THREE.PCFSoftShadowMap;
-
-
-renderer.shadowMap.autoUpdate =
-    true;
-
-
-document.body.appendChild(
-    renderer.domElement
-);
+document.body.appendChild(renderer.domElement);
 
 
 // ==========================================================
 // ENVIRONMENT
 // ==========================================================
 
-const pmrem =
-    new THREE.PMREMGenerator(
-        renderer
-    );
+const pmrem = new THREE.PMREMGenerator(renderer);
+const room = new RoomEnvironment();
+const environment = pmrem.fromScene(room, 0.04);
 
-
-const room =
-    new RoomEnvironment();
-
-
-const environment =
-    pmrem.fromScene(
-        room,
-        0.04
-    );
-
-
-scene.environment =
-    environment.texture;
-
+scene.environment = environment.texture;
 
 room.dispose();
-
 pmrem.dispose();
 
 
@@ -340,273 +202,57 @@ pmrem.dispose();
 
 RectAreaLightUniformsLib.init();
 
-
-const warmAreaKey =
-    new THREE.RectAreaLight(
-
-        0xffd7ad,
-
-        5.2,
-
-        6.5,
-
-        2.4
-
-    );
-
-
-warmAreaKey.position.set(
-
-    -3.8,
-
-    3.2,
-
-    4.2
-
-);
-
-
-warmAreaKey.lookAt(
-    0,
-    0,
-    0
-);
-
-
-scene.add(
-    warmAreaKey
-);
-
-
-// ----------------------------------------------------------
-// SHADOW KEY
-// ----------------------------------------------------------
-
-const shadowKey =
-    new THREE.SpotLight(
-
-        0xffdfbd,
-
-        95,
-
-        20,
-
-        Math.PI /
-        3.25,
-
-        0.72,
-
-        2
-
-    );
-
-
-shadowKey.position.set(
-
-    -4.8,
-
-    3.8,
-
-    5.0
-
-);
-
-
-shadowKey.target.position.set(
-    0,
-    0,
-    0
-);
-
-
-scene.add(
-    shadowKey.target
-);
-
-
-shadowKey.castShadow =
-    true;
-
-
-shadowKey.shadow.mapSize.width =
-    2048;
-
-
-shadowKey.shadow.mapSize.height =
-    2048;
-
-
-shadowKey.shadow.camera.near =
-    0.5;
-
-
-shadowKey.shadow.camera.far =
-    20;
-
-
-shadowKey.shadow.focus =
-    1;
-
-
-shadowKey.shadow.bias =
-    -0.00015;
-
-
-shadowKey.shadow.normalBias =
-    0.018;
-
-
-shadowKey.shadow.radius =
-    3;
-
-
-scene.add(
-    shadowKey
-);
-
-
-// ----------------------------------------------------------
-// COOL FILL
-// ----------------------------------------------------------
-
-const coolFill =
-    new THREE.RectAreaLight(
-
-        0xbecbff,
-
-        0.58,
-
-        4.5,
-
-        3.2
-
-    );
-
-
-coolFill.position.set(
-
-    4.0,
-
-    -2.8,
-
-    3.3
-
-);
-
-
-coolFill.lookAt(
-    0,
-    0,
-    0
-);
-
-
-scene.add(
-    coolFill
-);
-
-
-// ----------------------------------------------------------
-// WARM RIM
-// ----------------------------------------------------------
-
-const rimLight =
-    new THREE.RectAreaLight(
-
-        0xffc98c,
-
-        0.72,
-
-        4.5,
-
-        0.7
-
-    );
-
-
-rimLight.position.set(
-
-    1.5,
-
-    4.5,
-
-    2.6
-
-);
-
-
-rimLight.lookAt(
-    0,
-    0,
-    0
-);
-
-
-scene.add(
-    rimLight
-);
+const warmAreaKey = new THREE.RectAreaLight(0xffd7ad, 5.2, 6.5, 2.4);
+warmAreaKey.position.set(-3.8, 3.2, 4.2);
+warmAreaKey.lookAt(0, 0, 0);
+scene.add(warmAreaKey);
+
+const shadowKey = new THREE.SpotLight(0xffdfbd, 95, 20, Math.PI / 3.25, 0.72, 2);
+shadowKey.position.set(-4.8, 3.8, 5.0);
+shadowKey.target.position.set(0, 0, 0);
+scene.add(shadowKey.target);
+
+shadowKey.castShadow = true;
+shadowKey.shadow.mapSize.width = 2048;
+shadowKey.shadow.mapSize.height = 2048;
+shadowKey.shadow.camera.near = 0.5;
+shadowKey.shadow.camera.far = 20;
+shadowKey.shadow.focus = 1;
+shadowKey.shadow.bias = -0.00015;
+shadowKey.shadow.normalBias = 0.018;
+shadowKey.shadow.radius = 3;
+scene.add(shadowKey);
+
+const coolFill = new THREE.RectAreaLight(0xbecbff, 0.58, 4.5, 3.2);
+coolFill.position.set(4.0, -2.8, 3.3);
+coolFill.lookAt(0, 0, 0);
+scene.add(coolFill);
+
+const rimLight = new THREE.RectAreaLight(0xffc98c, 0.72, 4.5, 0.7);
+rimLight.position.set(1.5, 4.5, 2.6);
+rimLight.lookAt(0, 0, 0);
+scene.add(rimLight);
 
 
 // ==========================================================
 // TEXTURES
 // ==========================================================
 
-const textureLoader =
-    new THREE.TextureLoader();
+const textureLoader = new THREE.TextureLoader();
 
-
-async function loadTexture(
-    path
-) {
-
-    return await textureLoader.loadAsync(
-        path
-    );
-
+async function loadTexture(path) {
+    return await textureLoader.loadAsync(path);
 }
 
-
-function configureTexture(
-    texture
-) {
-
-    texture.wrapS =
-        THREE.RepeatWrapping;
-
-
-    texture.wrapT =
-        THREE.RepeatWrapping;
-
-
-    texture.repeat.set(
-
-        REPEAT_X,
-
-        REPEAT_Y
-
-    );
-
-
-    texture.anisotropy =
-        renderer.capabilities
-            .getMaxAnisotropy();
-
-
-    texture.minFilter =
-        THREE.LinearMipmapLinearFilter;
-
-
-    texture.magFilter =
-        THREE.LinearFilter;
-
-
-    texture.generateMipmaps =
-        true;
-
-
-    texture.needsUpdate =
-        true;
-
+function configureTexture(texture) {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(REPEAT_X, REPEAT_Y);
+    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = true;
+    texture.needsUpdate = true;
 }
 
 
@@ -614,52 +260,15 @@ function configureTexture(
 // HTML IMAGE LOADING
 // ==========================================================
 
-function loadHtmlImage(
-    path
-) {
+function loadHtmlImage(path) {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
 
-    return new Promise(
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error(`Could not load ${path}`));
 
-        (
-            resolve,
-            reject
-        ) => {
-
-            const image =
-                new Image();
-
-
-            image.onload =
-                () => {
-
-                    resolve(
-                        image
-                    );
-
-                };
-
-
-            image.onerror =
-                () => {
-
-                    reject(
-
-                        new Error(
-                            `Could not load ${path}`
-                        )
-
-                    );
-
-                };
-
-
-            image.src =
-                path;
-
-        }
-
-    );
-
+        image.src = path;
+    });
 }
 
 
@@ -667,140 +276,24 @@ function loadHtmlImage(
 // COLOR HELPERS
 // ==========================================================
 
-function srgbByteToLinear(
-    byteValue
-) {
-
-    const value =
-        byteValue /
-        255;
-
-
-    if (
-        value <=
-        0.04045
-    ) {
-
-        return (
-            value /
-            12.92
-        );
-
-    }
-
-
-    return Math.pow(
-
-        (
-            value +
-            0.055
-        )
-
-        /
-
-        1.055,
-
-        2.4
-
-    );
-
+function srgbByteToLinear(byteValue) {
+    const value = byteValue / 255;
+    if (value <= 0.04045) return value / 12.92;
+    return Math.pow((value + 0.055) / 1.055, 2.4);
 }
 
+function linearToSrgbByte(value) {
+    value = Math.max(0, Math.min(1, value));
 
-function linearToSrgbByte(
-    value
-) {
+    const srgb = value <= 0.0031308
+        ? value * 12.92
+        : 1.055 * Math.pow(value, 1 / 2.4) - 0.055;
 
-    value =
-        Math.max(
-
-            0,
-
-            Math.min(
-                1,
-                value
-            )
-
-        );
-
-
-    const srgb =
-
-        value <=
-        0.0031308
-
-            ?
-
-            value *
-            12.92
-
-            :
-
-            1.055 *
-            Math.pow(
-                value,
-                1 / 2.4
-            )
-            -
-            0.055;
-
-
-    return Math.round(
-
-        Math.max(
-
-            0,
-
-            Math.min(
-                1,
-                srgb
-            )
-
-        )
-
-        *
-
-        255
-
-    );
-
+    return Math.round(Math.max(0, Math.min(1, srgb)) * 255);
 }
 
-
-function linearRamp(
-
-    value,
-
-    blackPosition,
-
-    whitePosition
-
-) {
-
-    return Math.max(
-
-        0,
-
-        Math.min(
-
-            1,
-
-            (
-                value -
-                blackPosition
-            )
-
-            /
-
-            (
-                whitePosition -
-                blackPosition
-            )
-
-        )
-
-    );
-
+function linearRamp(value, blackPosition, whitePosition) {
+    return Math.max(0, Math.min(1, (value - blackPosition) / (whitePosition - blackPosition)));
 }
 
 
@@ -809,623 +302,122 @@ function linearRamp(
 // ==========================================================
 
 async function createV10SilkMaps() {
+    const [baseImage, maskImage] = await Promise.all([
+        loadHtmlImage('./textures/rug_basecolor.png'),
+        loadHtmlImage('./textures/rug_mask.png')
+    ]);
 
-    const [
-        baseImage,
-        maskImage
-    ] =
-        await Promise.all([
+    const width = baseImage.naturalWidth || baseImage.width;
+    const imageHeight = baseImage.naturalHeight || baseImage.height;
 
-            loadHtmlImage(
-                './textures/rug_basecolor.png'
-            ),
-
-            loadHtmlImage(
-                './textures/rug_mask.png'
-            )
-
-        ]);
-
-
-    const width =
-        baseImage.naturalWidth ||
-        baseImage.width;
-
-
-    const imageHeight =
-        baseImage.naturalHeight ||
-        baseImage.height;
-
-
-    if (
-        !width ||
-        !imageHeight
-    ) {
-
-        throw new Error(
-            'Base-color image has invalid dimensions.'
-        );
-
+    if (!width || !imageHeight) {
+        throw new Error('Base-color image has invalid dimensions.');
     }
 
+    const baseCanvas = document.createElement('canvas');
+    baseCanvas.width = width;
+    baseCanvas.height = imageHeight;
 
-    // ------------------------------------------------------
-    // BASE COLOR
-    // ------------------------------------------------------
+    const baseContext = baseCanvas.getContext('2d', { willReadFrequently: true });
+    if (!baseContext) throw new Error('Could not create base canvas.');
 
-    const baseCanvas =
-        document.createElement(
-            'canvas'
-        );
+    baseContext.drawImage(baseImage, 0, 0, width, imageHeight);
+    const baseData = baseContext.getImageData(0, 0, width, imageHeight);
 
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = width;
+    maskCanvas.height = imageHeight;
 
-    baseCanvas.width =
-        width;
+    const maskContext = maskCanvas.getContext('2d', { willReadFrequently: true });
+    if (!maskContext) throw new Error('Could not create mask canvas.');
 
+    maskContext.drawImage(maskImage, 0, 0, width, imageHeight);
+    const maskData = maskContext.getImageData(0, 0, width, imageHeight);
 
-    baseCanvas.height =
-        imageHeight;
+    const colorCanvas = document.createElement('canvas');
+    const metalCanvas = document.createElement('canvas');
+    const roughCanvas = document.createElement('canvas');
 
-
-    const baseContext =
-        baseCanvas.getContext(
-
-            '2d',
-
-            {
-                willReadFrequently:
-                    true
-            }
-
-        );
-
-
-    if (
-        !baseContext
-    ) {
-
-        throw new Error(
-            'Could not create base canvas.'
-        );
-
+    for (const canvas of [colorCanvas, metalCanvas, roughCanvas]) {
+        canvas.width = width;
+        canvas.height = imageHeight;
     }
 
+    const colorContext = colorCanvas.getContext('2d');
+    const metalContext = metalCanvas.getContext('2d');
+    const roughContext = roughCanvas.getContext('2d');
 
-    baseContext.drawImage(
-
-        baseImage,
-
-        0,
-        0,
-
-        width,
-        imageHeight
-
-    );
-
-
-    const baseData =
-        baseContext.getImageData(
-
-            0,
-            0,
-
-            width,
-            imageHeight
-
-        );
-
-
-    // ------------------------------------------------------
-    // MASK
-    // ------------------------------------------------------
-
-    const maskCanvas =
-        document.createElement(
-            'canvas'
-        );
-
-
-    maskCanvas.width =
-        width;
-
-
-    maskCanvas.height =
-        imageHeight;
-
-
-    const maskContext =
-        maskCanvas.getContext(
-
-            '2d',
-
-            {
-                willReadFrequently:
-                    true
-            }
-
-        );
-
-
-    if (
-        !maskContext
-    ) {
-
-        throw new Error(
-            'Could not create mask canvas.'
-        );
-
+    if (!colorContext || !metalContext || !roughContext) {
+        throw new Error('Could not create output canvases.');
     }
 
+    const colorOutput = colorContext.createImageData(width, imageHeight);
+    const metalOutput = metalContext.createImageData(width, imageHeight);
+    const roughOutput = roughContext.createImageData(width, imageHeight);
 
-    maskContext.drawImage(
+    const basePixels = baseData.data;
+    const maskPixels = maskData.data;
+    const colorPixels = colorOutput.data;
+    const metalPixels = metalOutput.data;
+    const roughPixels = roughOutput.data;
 
-        maskImage,
+    for (let i = 0; i < basePixels.length; i += 4) {
+        const maskR = maskPixels[i] / 255;
+        const maskG = maskPixels[i + 1] / 255;
+        const maskB = maskPixels[i + 2] / 255;
 
-        0,
-        0,
+        const greenModulation = 1.0 + (maskG - 1.0) * COLOR_MASK_STRENGTH;
 
-        width,
-        imageHeight
+        let r = srgbByteToLinear(basePixels[i]);
+        let g = srgbByteToLinear(basePixels[i + 1]);
+        let b = srgbByteToLinear(basePixels[i + 2]);
 
-    );
+        r *= 1.3 * greenModulation;
+        g *= 1.3 * greenModulation;
+        b *= 1.3 * greenModulation;
 
+        colorPixels[i] = linearToSrgbByte(r);
+        colorPixels[i + 1] = linearToSrgbByte(g);
+        colorPixels[i + 2] = linearToSrgbByte(b);
+        colorPixels[i + 3] = 255;
 
-    const maskData =
-        maskContext.getImageData(
+        const blenderMetal = linearRamp(maskR, 0.340, 0.578);
+        const metalness = blenderMetal * MAX_METALNESS;
+        const metalByte = Math.round(metalness * 255);
 
-            0,
-            0,
+        metalPixels[i] = metalByte;
+        metalPixels[i + 1] = metalByte;
+        metalPixels[i + 2] = metalByte;
+        metalPixels[i + 3] = 255;
 
-            width,
-            imageHeight
+        const blenderRoughness = linearRamp(maskB, 0.051, 0.763);
+        const roughness = MIN_SILK_ROUGHNESS + (MAX_SILK_ROUGHNESS - MIN_SILK_ROUGHNESS) * blenderRoughness;
+        const roughByte = Math.round(roughness * 255);
 
-        );
-
-
-    // ------------------------------------------------------
-    // OUTPUTS
-    // ------------------------------------------------------
-
-    const colorCanvas =
-        document.createElement(
-            'canvas'
-        );
-
-
-    const metalCanvas =
-        document.createElement(
-            'canvas'
-        );
-
-
-    const roughCanvas =
-        document.createElement(
-            'canvas'
-        );
-
-
-    for (
-        const canvas of [
-
-            colorCanvas,
-
-            metalCanvas,
-
-            roughCanvas
-
-        ]
-    ) {
-
-        canvas.width =
-            width;
-
-
-        canvas.height =
-            imageHeight;
-
+        roughPixels[i] = roughByte;
+        roughPixels[i + 1] = roughByte;
+        roughPixels[i + 2] = roughByte;
+        roughPixels[i + 3] = 255;
     }
 
+    colorContext.putImageData(colorOutput, 0, 0);
+    metalContext.putImageData(metalOutput, 0, 0);
+    roughContext.putImageData(roughOutput, 0, 0);
 
-    const colorContext =
-        colorCanvas.getContext(
-            '2d'
-        );
+    const colorTexture = new THREE.CanvasTexture(colorCanvas);
+    colorTexture.colorSpace = THREE.SRGBColorSpace;
 
+    const metalnessTexture = new THREE.CanvasTexture(metalCanvas);
+    metalnessTexture.colorSpace = THREE.NoColorSpace;
 
-    const metalContext =
-        metalCanvas.getContext(
-            '2d'
-        );
+    const roughnessTexture = new THREE.CanvasTexture(roughCanvas);
+    roughnessTexture.colorSpace = THREE.NoColorSpace;
 
+    configureTexture(colorTexture);
+    configureTexture(metalnessTexture);
+    configureTexture(roughnessTexture);
 
-    const roughContext =
-        roughCanvas.getContext(
-            '2d'
-        );
-
-
-    if (
-
-        !colorContext ||
-        !metalContext ||
-        !roughContext
-
-    ) {
-
-        throw new Error(
-            'Could not create output canvases.'
-        );
-
-    }
-
-
-    const colorOutput =
-        colorContext.createImageData(
-
-            width,
-
-            imageHeight
-
-        );
-
-
-    const metalOutput =
-        metalContext.createImageData(
-
-            width,
-
-            imageHeight
-
-        );
-
-
-    const roughOutput =
-        roughContext.createImageData(
-
-            width,
-
-            imageHeight
-
-        );
-
-
-    const basePixels =
-        baseData.data;
-
-
-    const maskPixels =
-        maskData.data;
-
-
-    const colorPixels =
-        colorOutput.data;
-
-
-    const metalPixels =
-        metalOutput.data;
-
-
-    const roughPixels =
-        roughOutput.data;
-
-
-    // ------------------------------------------------------
-    // PROCESS
-    // ------------------------------------------------------
-
-    for (
-
-        let i = 0;
-
-        i < basePixels.length;
-
-        i += 4
-
-    ) {
-
-        const maskR =
-            maskPixels[i] /
-            255;
-
-
-        const maskG =
-            maskPixels[
-                i + 1
-            ] /
-            255;
-
-
-        const maskB =
-            maskPixels[
-                i + 2
-            ] /
-            255;
-
-
-        const greenModulation =
-
-            1.0 +
-
-            (
-                maskG -
-                1.0
-            )
-
-            *
-
-            COLOR_MASK_STRENGTH;
-
-
-        let r =
-            srgbByteToLinear(
-                basePixels[i]
-            );
-
-
-        let g =
-            srgbByteToLinear(
-                basePixels[
-                    i + 1
-                ]
-            );
-
-
-        let b =
-            srgbByteToLinear(
-                basePixels[
-                    i + 2
-                ]
-            );
-
-
-        r *=
-            1.3 *
-            greenModulation;
-
-
-        g *=
-            1.3 *
-            greenModulation;
-
-
-        b *=
-            1.3 *
-            greenModulation;
-
-
-        colorPixels[i] =
-            linearToSrgbByte(
-                r
-            );
-
-
-        colorPixels[
-            i + 1
-        ] =
-            linearToSrgbByte(
-                g
-            );
-
-
-        colorPixels[
-            i + 2
-        ] =
-            linearToSrgbByte(
-                b
-            );
-
-
-        colorPixels[
-            i + 3
-        ] =
-            255;
-
-
-        // --------------------------------------------------
-        // METALLIC THREAD RESPONSE
-        // --------------------------------------------------
-
-        const blenderMetal =
-            linearRamp(
-
-                maskR,
-
-                0.340,
-
-                0.578
-
-            );
-
-
-        const metalness =
-
-            blenderMetal *
-
-            MAX_METALNESS;
-
-
-        const metalByte =
-            Math.round(
-
-                metalness *
-
-                255
-
-            );
-
-
-        metalPixels[i] =
-            metalByte;
-
-
-        metalPixels[
-            i + 1
-        ] =
-            metalByte;
-
-
-        metalPixels[
-            i + 2
-        ] =
-            metalByte;
-
-
-        metalPixels[
-            i + 3
-        ] =
-            255;
-
-
-        // --------------------------------------------------
-        // ROUGHNESS
-        // --------------------------------------------------
-
-        const blenderRoughness =
-            linearRamp(
-
-                maskB,
-
-                0.051,
-
-                0.763
-
-            );
-
-
-        const roughness =
-
-            MIN_SILK_ROUGHNESS +
-
-            (
-                MAX_SILK_ROUGHNESS -
-                MIN_SILK_ROUGHNESS
-            )
-
-            *
-
-            blenderRoughness;
-
-
-        const roughByte =
-            Math.round(
-
-                roughness *
-
-                255
-
-            );
-
-
-        roughPixels[i] =
-            roughByte;
-
-
-        roughPixels[
-            i + 1
-        ] =
-            roughByte;
-
-
-        roughPixels[
-            i + 2
-        ] =
-            roughByte;
-
-
-        roughPixels[
-            i + 3
-        ] =
-            255;
-
-    }
-
-
-    colorContext.putImageData(
-
-        colorOutput,
-
-        0,
-        0
-
-    );
-
-
-    metalContext.putImageData(
-
-        metalOutput,
-
-        0,
-        0
-
-    );
-
-
-    roughContext.putImageData(
-
-        roughOutput,
-
-        0,
-        0
-
-    );
-
-
-    const colorTexture =
-        new THREE.CanvasTexture(
-            colorCanvas
-        );
-
-
-    colorTexture.colorSpace =
-        THREE.SRGBColorSpace;
-
-
-    const metalnessTexture =
-        new THREE.CanvasTexture(
-            metalCanvas
-        );
-
-
-    metalnessTexture.colorSpace =
-        THREE.NoColorSpace;
-
-
-    const roughnessTexture =
-        new THREE.CanvasTexture(
-            roughCanvas
-        );
-
-
-    roughnessTexture.colorSpace =
-        THREE.NoColorSpace;
-
-
-    configureTexture(
-        colorTexture
-    );
-
-
-    configureTexture(
-        metalnessTexture
-    );
-
-
-    configureTexture(
-        roughnessTexture
-    );
-
-
-    return {
-
-        colorTexture,
-
-        metalnessTexture,
-
-        roughnessTexture
-
-    };
-
+    return { colorTexture, metalnessTexture, roughnessTexture };
 }
 
 
@@ -1434,320 +426,74 @@ async function createV10SilkMaps() {
 // ==========================================================
 
 let rug;
-
 let geometry;
-
 let positions;
-
 let vertexColors;
 
-
 let height;
-
 let velocity;
-
 let acceleration;
 
-
 let restX;
-
 let restY;
-
 let restZ;
 
 
 // ==========================================================
-// SIDE SELVAGE / FRAY STATE
+// SIDE DETAIL STATE
 // ==========================================================
 
-let sideBandGeometryLeft;
+let leftSelvageMesh;
+let rightSelvageMesh;
+let leftSelvagePositions;
+let rightSelvagePositions;
+let leftSelvageGeometry;
+let rightSelvageGeometry;
 
-let sideBandGeometryRight;
+let leftFrayMesh;
+let rightFrayMesh;
+let leftFrayPositions;
+let rightFrayPositions;
+let leftFrayGeometry;
+let rightFrayGeometry;
 
-let sideBandPositionsLeft;
-
-let sideBandPositionsRight;
-
-let sideBandMeshLeft;
-
-let sideBandMeshRight;
-
-
-let sideFrayGeometryLeft;
-
-let sideFrayGeometryRight;
-
-let sideFrayPositionsLeft;
-
-let sideFrayPositionsRight;
-
-let sideFrayMeshLeft;
-
-let sideFrayMeshRight;
-
-
-let leftFraySpecs =
-    [];
-
-let rightFraySpecs =
-    [];
+let leftFrayAlphaTexture;
+let rightFrayAlphaTexture;
 
 
 // ==========================================================
 // HELPERS
 // ==========================================================
 
-function indexOf(
-    x,
-    y
-) {
-
-    return (
-
-        y *
-        COLS
-
-        +
-
-        x
-
-    );
-
+function indexOf(x, y) {
+    return y * COLS + x;
 }
 
-
-function clamp01(
-    value
-) {
-
-    return Math.max(
-
-        0,
-
-        Math.min(
-            1,
-            value
-        )
-
-    );
-
+function clamp01(value) {
+    return Math.max(0, Math.min(1, value));
 }
 
-
-function lerp(
-    a,
-    b,
-    t
-) {
-
-    return (
-
-        a +
-
-        (
-            b -
-            a
-        )
-
-        *
-
-        t
-
-    );
-
+function lerp(a, b, t) {
+    return a + (b - a) * t;
 }
 
-
-function smoothstep01(
-    t
-) {
-
-    t =
-        clamp01(
-            t
-        );
-
-
-    return (
-
-        t *
-
-        t *
-
-        (
-            3 -
-            2 *
-            t
-        )
-
-    );
-
+function smoothstep01(t) {
+    t = clamp01(t);
+    return t * t * (3 - 2 * t);
 }
 
-
-function randomFromSeed(
-    seed
-) {
-
-    const x =
-
-        Math.sin(
-
-            seed *
-            91.173
-
-            +
-
-            17.917
-
-        )
-
-        *
-
-        43758.5453123;
-
-
-    return (
-
-        x -
-
-        Math.floor(
-            x
-        )
-
-    );
-
+function pseudoRandom(seed) {
+    const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453123;
+    return x - Math.floor(x);
 }
 
-
-// ==========================================================
-// SAMPLE POSITION ALONG LEFT / RIGHT SIDE
-// ==========================================================
-//
-// This lets us use hundreds of frayed fibers even though
-// the cloth itself only has 37 vertices vertically.
-//
-// We smoothly interpolate between neighboring cloth vertices.
-// ==========================================================
-
-function sampleSideEdgePosition(
-
-    sideSign,
-
-    t,
-
-    target
-
-) {
-
-    const rowFloat =
-
-        clamp01(
-            t
-        )
-
-        *
-
-        (
-            ROWS -
-            1
-        );
-
-
-    const row0 =
-        Math.floor(
-            rowFloat
-        );
-
-
-    const row1 =
-        Math.min(
-
-            ROWS -
-            1,
-
-            row0 +
-            1
-
-        );
-
-
-    const alpha =
-
-        rowFloat -
-        row0;
-
-
-    const xIndex =
-
-        sideSign < 0
-
-            ?
-
-            0
-
-            :
-
-            COLS -
-            1;
-
-
-    const i0 =
-        indexOf(
-            xIndex,
-            row0
-        );
-
-
-    const i1 =
-        indexOf(
-            xIndex,
-            row1
-        );
-
-
-    const a =
-        geometry
-            .attributes
-            .position
-            .array;
-
-
-    const o0 =
-        i0 *
-        3;
-
-
-    const o1 =
-        i1 *
-        3;
-
-
-    target.set(
-
-        lerp(
-            a[o0],
-            a[o1],
-            alpha
-        ),
-
-        lerp(
-            a[o0 + 1],
-            a[o1 + 1],
-            alpha
-        ),
-
-        lerp(
-            a[o0 + 2],
-            a[o1 + 2],
-            alpha
-        )
-
-    );
-
-
-    return target;
-
+function samplePosition(i) {
+    const base = i * 3;
+    return {
+        x: geometry.attributes.position.array[base + 0],
+        y: geometry.attributes.position.array[base + 1],
+        z: geometry.attributes.position.array[base + 2]
+    };
 }
 
 
@@ -1755,78 +501,11 @@ function sampleSideEdgePosition(
 // RESTING CLOTH SHAPE
 // ==========================================================
 
-function restingHeight(
-    x,
-    y
-) {
-
-    const wave1 =
-
-        Math.sin(
-
-            x *
-            1.15
-
-            +
-
-            y *
-            0.40
-
-        )
-
-        *
-
-        0.025;
-
-
-    const wave2 =
-
-        Math.sin(
-
-            x *
-            2.5
-
-            -
-
-            y *
-            1.25
-
-        )
-
-        *
-
-        0.012;
-
-
-    const wave3 =
-
-        Math.sin(
-
-            y *
-            3.4
-
-            +
-
-            x *
-            0.7
-
-        )
-
-        *
-
-        0.006;
-
-
-    return (
-
-        wave1 +
-
-        wave2 +
-
-        wave3
-
-    );
-
+function restingHeight(x, y) {
+    const wave1 = Math.sin(x * 1.15 + y * 0.40) * 0.025;
+    const wave2 = Math.sin(x * 2.5 - y * 1.25) * 0.012;
+    const wave3 = Math.sin(y * 3.4 + x * 0.7) * 0.006;
+    return wave1 + wave2 + wave3;
 }
 
 
@@ -1835,116 +514,34 @@ function restingHeight(
 // ==========================================================
 
 function initializeClothPhysics() {
+    positions = geometry.attributes.position;
+    positions.setUsage(THREE.DynamicDrawUsage);
 
-    positions =
-        geometry
-            .attributes
-            .position;
+    const count = positions.count;
 
+    height = new Float32Array(count);
+    velocity = new Float32Array(count);
+    acceleration = new Float32Array(count);
 
-    positions.setUsage(
-        THREE.DynamicDrawUsage
-    );
+    restX = new Float32Array(count);
+    restY = new Float32Array(count);
+    restZ = new Float32Array(count);
 
+    for (let i = 0; i < count; i++) {
+        const x = positions.getX(i);
+        const y = positions.getY(i);
+        const z = restingHeight(x, y);
 
-    const count =
-        positions.count;
+        restX[i] = x;
+        restY[i] = y;
+        restZ[i] = z;
 
-
-    height =
-        new Float32Array(
-            count
-        );
-
-
-    velocity =
-        new Float32Array(
-            count
-        );
-
-
-    acceleration =
-        new Float32Array(
-            count
-        );
-
-
-    restX =
-        new Float32Array(
-            count
-        );
-
-
-    restY =
-        new Float32Array(
-            count
-        );
-
-
-    restZ =
-        new Float32Array(
-            count
-        );
-
-
-    for (
-
-        let i = 0;
-
-        i < count;
-
-        i++
-
-    ) {
-
-        const x =
-            positions.getX(
-                i
-            );
-
-
-        const y =
-            positions.getY(
-                i
-            );
-
-
-        const z =
-            restingHeight(
-                x,
-                y
-            );
-
-
-        restX[i] =
-            x;
-
-
-        restY[i] =
-            y;
-
-
-        restZ[i] =
-            z;
-
-
-        positions.setZ(
-            i,
-            z
-        );
-
+        positions.setZ(i, z);
     }
 
-
-    positions.needsUpdate =
-        true;
-
-
+    positions.needsUpdate = true;
     geometry.computeVertexNormals();
-
-
     updateDynamicOcclusion();
-
 }
 
 
@@ -1952,574 +549,137 @@ function initializeClothPhysics() {
 // POINTER
 // ==========================================================
 
-const pointerNDC =
-    new THREE.Vector2();
+const pointerNDC = new THREE.Vector2();
+const raycaster = new THREE.Raycaster();
+const interactionPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+const intersection = new THREE.Vector3();
 
+let pointerActive = false;
 
-const raycaster =
-    new THREE.Raycaster();
+let targetPointerX = 0;
+let targetPointerY = 0;
 
+let smoothPointerX = 0;
+let smoothPointerY = 0;
 
-const interactionPlane =
-    new THREE.Plane(
+let previousSmoothPointerX = 0;
+let previousSmoothPointerY = 0;
 
-        new THREE.Vector3(
-            0,
-            0,
-            1
-        ),
+let smoothPointerSpeed = 0;
 
-        0
+let motionDirX = 1;
+let motionDirY = 0;
 
-    );
-
-
-const intersection =
-    new THREE.Vector3();
-
-
-let pointerActive =
-    false;
-
-
-let targetPointerX =
-    0;
-
-
-let targetPointerY =
-    0;
-
-
-let smoothPointerX =
-    0;
-
-
-let smoothPointerY =
-    0;
-
-
-let previousSmoothPointerX =
-    0;
-
-
-let previousSmoothPointerY =
-    0;
-
-
-let smoothPointerSpeed =
-    0;
-
-
-let motionDirX =
-    1;
-
-
-let motionDirY =
-    0;
-
-
-let hasSmoothPointer =
-    false;
-
-
-let interactionPresence =
-    0;
-
-
-let visualSpeed01 =
-    0;
+let hasSmoothPointer = false;
+let interactionPresence = 0;
+let visualSpeed01 = 0;
 
 
 // ==========================================================
 // POINTER MOVE
 // ==========================================================
 
-function onPointerMove(
-    event
-) {
+function onPointerMove(event) {
+    const rect = renderer.domElement.getBoundingClientRect();
 
-    const rect =
+    pointerNDC.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    pointerNDC.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-        renderer.domElement
-            .getBoundingClientRect();
+    raycaster.setFromCamera(pointerNDC, camera);
+    const hit = raycaster.ray.intersectPlane(interactionPlane, intersection);
 
-
-    pointerNDC.x =
-
-        (
-            (
-                event.clientX -
-                rect.left
-            )
-
-            /
-
-            rect.width
-        )
-
-        *
-
-        2
-
-        -
-
-        1;
-
-
-    pointerNDC.y =
-
-        -(
-
-            (
-                event.clientY -
-                rect.top
-            )
-
-            /
-
-            rect.height
-
-        )
-
-        *
-
-        2
-
-        +
-
-        1;
-
-
-    raycaster.setFromCamera(
-
-        pointerNDC,
-
-        camera
-
-    );
-
-
-    const hit =
-
-        raycaster.ray
-            .intersectPlane(
-
-                interactionPlane,
-
-                intersection
-
-            );
-
-
-    if (
-        !hit
-    ) {
-
-        pointerActive =
-            false;
-
-
+    if (!hit) {
+        pointerActive = false;
         return;
-
     }
-
 
     const inside =
+        Math.abs(intersection.x) <= RUG_WIDTH / 2 &&
+        Math.abs(intersection.y) <= RUG_HEIGHT / 2;
 
-        Math.abs(
-            intersection.x
-        )
-
-        <=
-
-        RUG_WIDTH /
-        2
-
-        &&
-
-        Math.abs(
-            intersection.y
-        )
-
-        <=
-
-        RUG_HEIGHT /
-        2;
-
-
-    if (
-        !inside
-    ) {
-
-        pointerActive =
-            false;
-
-
+    if (!inside) {
+        pointerActive = false;
         return;
-
     }
 
+    targetPointerX = intersection.x;
+    targetPointerY = intersection.y;
 
-    targetPointerX =
-        intersection.x;
-
-
-    targetPointerY =
-        intersection.y;
-
-
-    if (
-        !hasSmoothPointer
-    ) {
-
-        smoothPointerX =
-            targetPointerX;
-
-
-        smoothPointerY =
-            targetPointerY;
-
-
-        previousSmoothPointerX =
-            smoothPointerX;
-
-
-        previousSmoothPointerY =
-            smoothPointerY;
-
-
-        hasSmoothPointer =
-            true;
-
+    if (!hasSmoothPointer) {
+        smoothPointerX = targetPointerX;
+        smoothPointerY = targetPointerY;
+        previousSmoothPointerX = smoothPointerX;
+        previousSmoothPointerY = smoothPointerY;
+        hasSmoothPointer = true;
     }
 
-
-    pointerActive =
-        true;
-
+    pointerActive = true;
 }
-
 
 function onPointerLeave() {
-
-    pointerActive =
-        false;
-
-
-    hasSmoothPointer =
-        false;
-
-
-    smoothPointerSpeed =
-        0;
-
+    pointerActive = false;
+    hasSmoothPointer = false;
+    smoothPointerSpeed = 0;
 }
 
-
-renderer.domElement.addEventListener(
-
-    'pointermove',
-
-    onPointerMove
-
-);
-
-
-renderer.domElement.addEventListener(
-
-    'pointerleave',
-
-    onPointerLeave
-
-);
+renderer.domElement.addEventListener('pointermove', onPointerMove);
+renderer.domElement.addEventListener('pointerleave', onPointerLeave);
 
 
 // ==========================================================
 // SMOOTH POINTER
 // ==========================================================
 
-function updateSmoothPointer(
-    dt
-) {
+function updateSmoothPointer(dt) {
+    const presenceTarget = pointerActive ? 1 : 0;
+    const presenceFollow = 1 - Math.exp(-10 * dt);
 
-    const presenceTarget =
+    interactionPresence += (presenceTarget - interactionPresence) * presenceFollow;
 
-        pointerActive
-
-            ?
-
-            1
-
-            :
-
-            0;
-
-
-    const presenceFollow =
-
-        1
-
-        -
-
-        Math.exp(
-            -10 *
-            dt
-        );
-
-
-    interactionPresence +=
-
-        (
-            presenceTarget -
-            interactionPresence
-        )
-
-        *
-
-        presenceFollow;
-
-
-    if (
-        !pointerActive
-    ) {
-
-        smoothPointerSpeed *=
-
-            Math.exp(
-                -10 *
-                dt
-            );
-
-
-        visualSpeed01 *=
-
-            Math.exp(
-                -7 *
-                dt
-            );
-
-
+    if (!pointerActive) {
+        smoothPointerSpeed *= Math.exp(-10 * dt);
+        visualSpeed01 *= Math.exp(-7 * dt);
         return;
-
     }
 
+    const follow = 1 - Math.exp(-POINTER_FOLLOW_SPEED * dt);
 
-    const follow =
+    smoothPointerX += (targetPointerX - smoothPointerX) * follow;
+    smoothPointerY += (targetPointerY - smoothPointerY) * follow;
 
-        1
+    const dx = smoothPointerX - previousSmoothPointerX;
+    const dy = smoothPointerY - previousSmoothPointerY;
 
-        -
+    const instantaneousVX = dx / Math.max(dt, 0.0001);
+    const instantaneousVY = dy / Math.max(dt, 0.0001);
 
-        Math.exp(
+    const instantaneousSpeed = Math.sqrt(
+        instantaneousVX * instantaneousVX +
+        instantaneousVY * instantaneousVY
+    );
 
-            -POINTER_FOLLOW_SPEED *
+    previousSmoothPointerX = smoothPointerX;
+    previousSmoothPointerY = smoothPointerY;
 
-            dt
+    const speedFollow = 1 - Math.exp(-SPEED_SMOOTHING * dt);
+    smoothPointerSpeed += (instantaneousSpeed - smoothPointerSpeed) * speedFollow;
 
-        );
+    if (instantaneousSpeed > DIRECTION_UPDATE_THRESHOLD) {
+        const targetDirX = instantaneousVX / instantaneousSpeed;
+        const targetDirY = instantaneousVY / instantaneousSpeed;
 
+        const directionFollow = 1 - Math.exp(-DIRECTION_FOLLOW_SPEED * dt);
 
-    smoothPointerX +=
+        motionDirX += (targetDirX - motionDirX) * directionFollow;
+        motionDirY += (targetDirY - motionDirY) * directionFollow;
 
-        (
-            targetPointerX -
-            smoothPointerX
-        )
+        const directionLength = Math.sqrt(motionDirX * motionDirX + motionDirY * motionDirY);
 
-        *
-
-        follow;
-
-
-    smoothPointerY +=
-
-        (
-            targetPointerY -
-            smoothPointerY
-        )
-
-        *
-
-        follow;
-
-
-    const dx =
-
-        smoothPointerX -
-        previousSmoothPointerX;
-
-
-    const dy =
-
-        smoothPointerY -
-        previousSmoothPointerY;
-
-
-    const instantaneousVX =
-
-        dx /
-
-        Math.max(
-            dt,
-            0.0001
-        );
-
-
-    const instantaneousVY =
-
-        dy /
-
-        Math.max(
-            dt,
-            0.0001
-        );
-
-
-    const instantaneousSpeed =
-
-        Math.sqrt(
-
-            instantaneousVX *
-            instantaneousVX
-
-            +
-
-            instantaneousVY *
-            instantaneousVY
-
-        );
-
-
-    previousSmoothPointerX =
-        smoothPointerX;
-
-
-    previousSmoothPointerY =
-        smoothPointerY;
-
-
-    const speedFollow =
-
-        1
-
-        -
-
-        Math.exp(
-
-            -SPEED_SMOOTHING *
-
-            dt
-
-        );
-
-
-    smoothPointerSpeed +=
-
-        (
-            instantaneousSpeed -
-            smoothPointerSpeed
-        )
-
-        *
-
-        speedFollow;
-
-
-    if (
-
-        instantaneousSpeed >
-
-        DIRECTION_UPDATE_THRESHOLD
-
-    ) {
-
-        const targetDirX =
-
-            instantaneousVX /
-
-            instantaneousSpeed;
-
-
-        const targetDirY =
-
-            instantaneousVY /
-
-            instantaneousSpeed;
-
-
-        const directionFollow =
-
-            1
-
-            -
-
-            Math.exp(
-
-                -DIRECTION_FOLLOW_SPEED *
-
-                dt
-
-            );
-
-
-        motionDirX +=
-
-            (
-                targetDirX -
-                motionDirX
-            )
-
-            *
-
-            directionFollow;
-
-
-        motionDirY +=
-
-            (
-                targetDirY -
-                motionDirY
-            )
-
-            *
-
-            directionFollow;
-
-
-        const directionLength =
-
-            Math.sqrt(
-
-                motionDirX *
-                motionDirX
-
-                +
-
-                motionDirY *
-                motionDirY
-
-            );
-
-
-        if (
-
-            directionLength >
-
-            0.0001
-
-        ) {
-
-            motionDirX /=
-                directionLength;
-
-
-            motionDirY /=
-                directionLength;
-
+        if (directionLength > 0.0001) {
+            motionDirX /= directionLength;
+            motionDirY /= directionLength;
         }
-
     }
-
 }
 
 
@@ -2528,99 +688,22 @@ function updateSmoothPointer(
 // ==========================================================
 
 function getPointerEffect() {
-
     const normalizedSpeed =
+        (smoothPointerSpeed - SPEED_DEADZONE) /
+        (SPEED_FULL_EFFECT - SPEED_DEADZONE);
 
-        (
-            smoothPointerSpeed -
-            SPEED_DEADZONE
-        )
+    let speed01 = smoothstep01(normalizedSpeed);
+    speed01 = Math.pow(speed01, 1.35);
 
-        /
-
-        (
-            SPEED_FULL_EFFECT -
-            SPEED_DEADZONE
-        );
-
-
-    let speed01 =
-
-        smoothstep01(
-            normalizedSpeed
-        );
-
-
-    speed01 =
-
-        Math.pow(
-            speed01,
-            1.35
-        );
-
-
-    visualSpeed01 =
-        speed01;
-
+    visualSpeed01 = speed01;
 
     return {
-
         speed01,
-
-
-        bulge:
-
-            lerp(
-
-                MIN_BULGE,
-
-                MAX_BULGE,
-
-                speed01
-
-            ),
-
-
-        radius:
-
-            lerp(
-
-                MIN_RADIUS,
-
-                MAX_RADIUS,
-
-                speed01
-
-            ),
-
-
-        stiffness:
-
-            lerp(
-
-                MIN_POINTER_STIFFNESS,
-
-                MAX_POINTER_STIFFNESS,
-
-                speed01
-
-            ),
-
-
-        localDamping:
-
-            lerp(
-
-                SLOW_POINTER_DAMPING,
-
-                FAST_POINTER_DAMPING,
-
-                speed01
-
-            )
-
+        bulge: lerp(MIN_BULGE, MAX_BULGE, speed01),
+        radius: lerp(MIN_RADIUS, MAX_RADIUS, speed01),
+        stiffness: lerp(MIN_POINTER_STIFFNESS, MAX_POINTER_STIFFNESS, speed01),
+        localDamping: lerp(SLOW_POINTER_DAMPING, FAST_POINTER_DAMPING, speed01)
     };
-
 }
 
 
@@ -2628,420 +711,89 @@ function getPointerEffect() {
 // CLOTH SIMULATION
 // ==========================================================
 
-function simulateCloth(
-    dt
-) {
+function simulateCloth(dt) {
+    updateSmoothPointer(dt);
+    acceleration.fill(0);
 
-    updateSmoothPointer(
-        dt
-    );
+    const step = dt * 60;
 
+    for (let y = 1; y < ROWS - 1; y++) {
+        for (let x = 1; x < COLS - 1; x++) {
+            const i = indexOf(x, y);
+            const left = indexOf(x - 1, y);
+            const right = indexOf(x + 1, y);
+            const down = indexOf(x, y - 1);
+            const up = indexOf(x, y + 1);
 
-    acceleration.fill(
-        0
-    );
+            const neighborAverage = (height[left] + height[right] + height[down] + height[up]) * 0.25;
 
-
-    const step =
-        dt *
-        60;
-
-
-    // ------------------------------------------------------
-    // SPRINGS
-    // ------------------------------------------------------
-
-    for (
-
-        let y = 1;
-
-        y < ROWS - 1;
-
-        y++
-
-    ) {
-
-        for (
-
-            let x = 1;
-
-            x < COLS - 1;
-
-            x++
-
-        ) {
-
-            const i =
-                indexOf(
-                    x,
-                    y
-                );
-
-
-            const left =
-                indexOf(
-                    x - 1,
-                    y
-                );
-
-
-            const right =
-                indexOf(
-                    x + 1,
-                    y
-                );
-
-
-            const down =
-                indexOf(
-                    x,
-                    y - 1
-                );
-
-
-            const up =
-                indexOf(
-                    x,
-                    y + 1
-                );
-
-
-            const neighborAverage =
-
-                (
-                    height[left] +
-
-                    height[right] +
-
-                    height[down] +
-
-                    height[up]
-                )
-
-                *
-
-                0.25;
-
-
-            acceleration[i] +=
-
-                (
-                    neighborAverage -
-                    height[i]
-                )
-
-                *
-
-                TENSION;
-
-
-            acceleration[i] +=
-
-                -height[i] *
-
-                RESTORE_FORCE;
-
+            acceleration[i] += (neighborAverage - height[i]) * TENSION;
+            acceleration[i] += -height[i] * RESTORE_FORCE;
         }
-
     }
 
+    if (pointerActive && hasSmoothPointer) {
+        const effect = getPointerEffect();
+        const radiusSquared = effect.radius * effect.radius;
 
-    // ------------------------------------------------------
-    // POINTER FORCE
-    // ------------------------------------------------------
+        for (let y = 1; y < ROWS - 1; y++) {
+            for (let x = 1; x < COLS - 1; x++) {
+                const i = indexOf(x, y);
 
-    if (
+                const dx = restX[i] - smoothPointerX;
+                const dy = restY[i] - smoothPointerY;
+                const distanceSquared = dx * dx + dy * dy;
 
-        pointerActive &&
+                if (distanceSquared < radiusSquared) {
+                    const distance = Math.sqrt(distanceSquared);
 
-        hasSmoothPointer
+                    let influence = 1 - distance / effect.radius;
+                    influence = smoothstep01(influence);
 
-    ) {
+                    const targetHeight = effect.bulge * influence;
+                    const error = targetHeight - height[i];
 
-        const effect =
-            getPointerEffect();
-
-
-        const radiusSquared =
-
-            effect.radius *
-
-            effect.radius;
-
-
-        for (
-
-            let y = 1;
-
-            y < ROWS - 1;
-
-            y++
-
-        ) {
-
-            for (
-
-                let x = 1;
-
-                x < COLS - 1;
-
-                x++
-
-            ) {
-
-                const i =
-                    indexOf(
-                        x,
-                        y
-                    );
-
-
-                const dx =
-
-                    restX[i] -
-                    smoothPointerX;
-
-
-                const dy =
-
-                    restY[i] -
-                    smoothPointerY;
-
-
-                const distanceSquared =
-
-                    dx *
-                    dx
-
-                    +
-
-                    dy *
-                    dy;
-
-
-                if (
-
-                    distanceSquared <
-                    radiusSquared
-
-                ) {
-
-                    const distance =
-
-                        Math.sqrt(
-                            distanceSquared
-                        );
-
-
-                    let influence =
-
-                        1
-
-                        -
-
-                        distance /
-                        effect.radius;
-
-
-                    influence =
-
-                        smoothstep01(
-                            influence
-                        );
-
-
-                    const targetHeight =
-
-                        effect.bulge *
-
-                        influence;
-
-
-                    const error =
-
-                        targetHeight -
-
-                        height[i];
-
-
-                    acceleration[i] +=
-
-                        error *
-
-                        effect.stiffness;
-
-
-                    acceleration[i] -=
-
-                        velocity[i] *
-
-                        effect.localDamping *
-
-                        influence;
-
+                    acceleration[i] += error * effect.stiffness;
+                    acceleration[i] -= velocity[i] * effect.localDamping * influence;
                 }
-
             }
-
         }
-
     }
 
+    const frameDamping = Math.pow(DAMPING, step);
 
-    // ------------------------------------------------------
-    // INTEGRATE
-    // ------------------------------------------------------
+    for (let y = 1; y < ROWS - 1; y++) {
+        for (let x = 1; x < COLS - 1; x++) {
+            const i = indexOf(x, y);
 
-    const frameDamping =
-
-        Math.pow(
-
-            DAMPING,
-
-            step
-
-        );
-
-
-    for (
-
-        let y = 1;
-
-        y < ROWS - 1;
-
-        y++
-
-    ) {
-
-        for (
-
-            let x = 1;
-
-            x < COLS - 1;
-
-            x++
-
-        ) {
-
-            const i =
-                indexOf(
-                    x,
-                    y
-                );
-
-
-            velocity[i] +=
-
-                acceleration[i] *
-
-                step;
-
-
-            velocity[i] *=
-                frameDamping;
-
-
-            height[i] +=
-
-                velocity[i] *
-
-                step;
-
+            velocity[i] += acceleration[i] * step;
+            velocity[i] *= frameDamping;
+            height[i] += velocity[i] * step;
         }
-
     }
 
+    // pin perimeter
+    for (let x = 0; x < COLS; x++) {
+        const bottom = indexOf(x, 0);
+        const top = indexOf(x, ROWS - 1);
 
-    // ------------------------------------------------------
-    // STABLE PERIMETER
-    //
-    // The fray hangs from a stable rug edge instead of
-    // letting the rug flip over near the sides.
-    // ------------------------------------------------------
+        height[bottom] = 0;
+        velocity[bottom] = 0;
 
-    for (
-
-        let x = 0;
-
-        x < COLS;
-
-        x++
-
-    ) {
-
-        const bottom =
-            indexOf(
-                x,
-                0
-            );
-
-
-        const top =
-            indexOf(
-                x,
-                ROWS - 1
-            );
-
-
-        height[bottom] =
-            0;
-
-
-        velocity[bottom] =
-            0;
-
-
-        height[top] =
-            0;
-
-
-        velocity[top] =
-            0;
-
+        height[top] = 0;
+        velocity[top] = 0;
     }
 
+    for (let y = 0; y < ROWS; y++) {
+        const left = indexOf(0, y);
+        const right = indexOf(COLS - 1, y);
 
-    for (
+        height[left] = 0;
+        velocity[left] = 0;
 
-        let y = 0;
-
-        y < ROWS;
-
-        y++
-
-    ) {
-
-        const left =
-            indexOf(
-                0,
-                y
-            );
-
-
-        const right =
-            indexOf(
-                COLS - 1,
-                y
-            );
-
-
-        height[left] =
-            0;
-
-
-        velocity[left] =
-            0;
-
-
-        height[right] =
-            0;
-
-
-        velocity[right] =
-            0;
-
+        height[right] = 0;
+        velocity[right] = 0;
     }
-
 }
 
 
@@ -3050,1568 +802,561 @@ function simulateCloth(
 // ==========================================================
 
 function updateDynamicOcclusion() {
+    if (!positions || !vertexColors || !restZ) return;
 
-    if (
+    const posArray = positions.array;
+    const colorArray = vertexColors.array;
 
-        !positions ||
+    const halfWidth = RUG_WIDTH / 2;
+    const halfHeight = RUG_HEIGHT / 2;
 
-        !vertexColors ||
+    for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+            const i = indexOf(x, y);
+            const baseIndex = i * 3;
 
-        !restZ
+            let brightness = 1.0;
 
-    ) {
+            if (x > 0 && x < COLS - 1 && y > 0 && y < ROWS - 1) {
+                const left = indexOf(x - 1, y);
+                const right = indexOf(x + 1, y);
+                const down = indexOf(x, y - 1);
+                const up = indexOf(x, y + 1);
 
-        return;
+                const centerDisp = posArray[baseIndex + 2] - restZ[i];
+                const leftDisp = posArray[left * 3 + 2] - restZ[left];
+                const rightDisp = posArray[right * 3 + 2] - restZ[right];
+                const downDisp = posArray[down * 3 + 2] - restZ[down];
+                const upDisp = posArray[up * 3 + 2] - restZ[up];
 
-    }
+                const neighborAverage = (leftDisp + rightDisp + downDisp + upDisp) * 0.25;
+                const curvature = neighborAverage - centerDisp;
 
-
-    const posArray =
-        positions.array;
-
-
-    const colorArray =
-        vertexColors.array;
-
-
-    const halfWidth =
-        RUG_WIDTH /
-        2;
-
-
-    const halfHeight =
-        RUG_HEIGHT /
-        2;
-
-
-    for (
-
-        let y = 0;
-
-        y < ROWS;
-
-        y++
-
-    ) {
-
-        for (
-
-            let x = 0;
-
-            x < COLS;
-
-            x++
-
-        ) {
-
-            const i =
-                indexOf(
-                    x,
-                    y
-                );
-
-
-            const baseIndex =
-                i *
-                3;
-
-
-            let brightness =
-                1.0;
-
-
-            if (
-
-                x > 0 &&
-
-                x < COLS - 1 &&
-
-                y > 0 &&
-
-                y < ROWS - 1
-
-            ) {
-
-                const left =
-                    indexOf(
-                        x - 1,
-                        y
-                    );
-
-
-                const right =
-                    indexOf(
-                        x + 1,
-                        y
-                    );
-
-
-                const down =
-                    indexOf(
-                        x,
-                        y - 1
-                    );
-
-
-                const up =
-                    indexOf(
-                        x,
-                        y + 1
-                    );
-
-
-                const centerDisp =
-
-                    posArray[
-                        baseIndex + 2
-                    ]
-
-                    -
-
-                    restZ[i];
-
-
-                const leftDisp =
-
-                    posArray[
-                        left * 3 + 2
-                    ]
-
-                    -
-
-                    restZ[left];
-
-
-                const rightDisp =
-
-                    posArray[
-                        right * 3 + 2
-                    ]
-
-                    -
-
-                    restZ[right];
-
-
-                const downDisp =
-
-                    posArray[
-                        down * 3 + 2
-                    ]
-
-                    -
-
-                    restZ[down];
-
-
-                const upDisp =
-
-                    posArray[
-                        up * 3 + 2
-                    ]
-
-                    -
-
-                    restZ[up];
-
-
-                const neighborAverage =
-
-                    (
-                        leftDisp +
-
-                        rightDisp +
-
-                        downDisp +
-
-                        upDisp
-                    )
-
-                    *
-
-                    0.25;
-
-
-                const curvature =
-
-                    neighborAverage -
-
-                    centerDisp;
-
-
-                const valley01 =
-
-                    smoothstep01(
-
-                        (
-                            curvature -
-                            CURVATURE_START
-                        )
-
-                        /
-
-                        (
-                            CURVATURE_END -
-                            CURVATURE_START
-                        )
-
-                    );
-
-
-                const crest01 =
-
-                    smoothstep01(
-
-                        (
-                            -curvature -
-                            CURVATURE_START
-                        )
-
-                        /
-
-                        (
-                            CURVATURE_END -
-                            CURVATURE_START
-                        )
-
-                    );
-
+                const valley01 = smoothstep01((curvature - CURVATURE_START) / (CURVATURE_END - CURVATURE_START));
+                const crest01 = smoothstep01((-curvature - CURVATURE_START) / (CURVATURE_END - CURVATURE_START));
 
                 const rawBrightness =
+                    1.0 -
+                    valley01 * VALLEY_DARKEN_STRENGTH +
+                    crest01 * CREST_LIGHTEN_STRENGTH;
 
-                    1.0
+                const edgeDistanceX = halfWidth - Math.abs(restX[i]);
+                const edgeDistanceY = halfHeight - Math.abs(restY[i]);
 
-                    -
+                const edgeFade = smoothstep01(
+                    Math.min(edgeDistanceX / 0.38, edgeDistanceY / 0.38)
+                );
 
-                    valley01 *
-                    VALLEY_DARKEN_STRENGTH
-
-                    +
-
-                    crest01 *
-                    CREST_LIGHTEN_STRENGTH;
-
-
-                const edgeDistanceX =
-
-                    halfWidth -
-
-                    Math.abs(
-                        restX[i]
-                    );
-
-
-                const edgeDistanceY =
-
-                    halfHeight -
-
-                    Math.abs(
-                        restY[i]
-                    );
-
-
-                const edgeFade =
-
-                    smoothstep01(
-
-                        Math.min(
-
-                            edgeDistanceX /
-                            0.38,
-
-                            edgeDistanceY /
-                            0.38
-
-                        )
-
-                    );
-
-
-                brightness =
-
-                    lerp(
-
-                        1.0,
-
-                        rawBrightness,
-
-                        edgeFade
-
-                    );
-
+                brightness = lerp(1.0, rawBrightness, edgeFade);
             }
 
+            brightness = THREE.MathUtils.clamp(brightness, 0.58, 1.03);
 
-            brightness =
+            colorArray[baseIndex] = brightness;
+            colorArray[baseIndex + 1] = brightness;
+            colorArray[baseIndex + 2] = brightness;
+        }
+    }
 
-                THREE.MathUtils.clamp(
-
-                    brightness,
-
-                    0.58,
-
-                    1.03
-
-                );
+    vertexColors.needsUpdate = true;
+}
 
 
-            colorArray[
-                baseIndex
-            ] =
-                brightness;
+// ==========================================================
+// FRAY TEXTURE GENERATION
+// ==========================================================
+
+function buildFrayAlphaCanvas() {
+    const width = 256;
+    const height = 1024;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, width, height);
+
+    const imageData = ctx.createImageData(width, height);
+    const data = imageData.data;
+
+    // Texture layout:
+    // right side = attached to rug
+    // left side = broken fuzzy fibers
+
+    for (let y = 0; y < height; y++) {
+        const ny = y / (height - 1);
+
+        const wave =
+            Math.sin(ny * 20.0) * 6 +
+            Math.sin(ny * 57.0 + 0.8) * 2.5;
+
+        const noiseA = pseudoRandom(1000 + y * 0.173);
+        const noiseB = pseudoRandom(2000 + y * 0.317);
+
+        const solidStart = Math.floor(width * 0.68 + wave + (noiseA - 0.5) * 12);
+        const fringeReach = Math.floor(width * (0.18 + noiseB * 0.18));
+        const fringeStart = Math.max(0, solidStart - fringeReach);
+
+        for (let x = 0; x < width; x++) {
+            let alpha = 0;
+
+            if (x >= solidStart) {
+                const t = (x - solidStart) / Math.max(1, width - solidStart);
+                alpha = lerp(210, 255, t);
+            } else if (x >= fringeStart) {
+                const t = (x - fringeStart) / Math.max(1, solidStart - fringeStart);
+
+                const density =
+                    0.18 +
+                    t * 0.82;
+
+                const grain = pseudoRandom(5000 + x * 0.91 + y * 0.13);
+                const keep = grain < density;
+
+                if (keep) {
+                    const fade = Math.pow(t, 0.8);
+                    alpha = 255 * fade * lerp(0.45, 1.0, pseudoRandom(8000 + x * 0.37 + y * 0.21));
+                }
+            }
+
+            const i = (y * width + x) * 4;
+            data[i + 0] = 255;
+            data[i + 1] = 255;
+            data[i + 2] = 255;
+            data[i + 3] = Math.round(alpha);
+        }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    // Add long thread-like wisps
+    ctx.strokeStyle = 'rgba(255,255,255,0.50)';
+    ctx.lineCap = 'round';
+
+    for (let i = 0; i < 240; i++) {
+        const y = pseudoRandom(9000 + i) * height;
+        const length = lerp(10, 38, pseudoRandom(9100 + i));
+        const thickness = lerp(0.4, 1.3, pseudoRandom(9200 + i));
+
+        const startX = lerp(width * 0.50, width * 0.76, pseudoRandom(9300 + i));
+        const endX = Math.max(0, startX - length);
+
+        const wiggle = (pseudoRandom(9400 + i) - 0.5) * 12;
+
+        ctx.lineWidth = thickness;
+        ctx.beginPath();
+        ctx.moveTo(startX, y);
+        ctx.quadraticCurveTo(
+            lerp(endX, startX, 0.55),
+            y + wiggle,
+            endX,
+            y + wiggle * 0.65
+        );
+        ctx.stroke();
+    }
+
+    // Small detached linty bits
+    ctx.fillStyle = 'rgba(255,255,255,0.32)';
+    for (let i = 0; i < 260; i++) {
+        const x = pseudoRandom(10000 + i) * (width * 0.62);
+        const y = pseudoRandom(11000 + i) * height;
+        const r = lerp(0.4, 1.6, pseudoRandom(12000 + i));
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    return canvas;
+}
+
+function mirrorCanvas(sourceCanvas) {
+    const canvas = document.createElement('canvas');
+    canvas.width = sourceCanvas.width;
+    canvas.height = sourceCanvas.height;
+
+    const ctx = canvas.getContext('2d');
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(sourceCanvas, 0, 0);
+
+    return canvas;
+}
+
+function makeFrayAlphaTextures() {
+    const leftCanvas = buildFrayAlphaCanvas();
+    const rightCanvas = mirrorCanvas(leftCanvas);
+
+    leftFrayAlphaTexture = new THREE.CanvasTexture(leftCanvas);
+    rightFrayAlphaTexture = new THREE.CanvasTexture(rightCanvas);
+
+    for (const tex of [leftFrayAlphaTexture, rightFrayAlphaTexture]) {
+        tex.colorSpace = THREE.NoColorSpace;
+        tex.wrapS = THREE.ClampToEdgeWrapping;
+        tex.wrapT = THREE.ClampToEdgeWrapping;
+        tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        tex.generateMipmaps = true;
+        tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        tex.needsUpdate = true;
+    }
+}
 
 
-            colorArray[
-                baseIndex + 1
-            ] =
-                brightness;
+// ==========================================================
+// STRIP GEOMETRY HELPERS
+// ==========================================================
+
+function createStripGeometry(rowCount) {
+    const vertexCount = rowCount * 2;
+    const positionArray = new Float32Array(vertexCount * 3);
+    const uvArray = new Float32Array(vertexCount * 2);
+    const indices = [];
+
+    for (let r = 0; r < rowCount; r++) {
+        const t = rowCount <= 1 ? 0 : r / (rowCount - 1);
+        const v0 = r * 2;
+        const v1 = v0 + 1;
+
+        // inner vertex
+        uvArray[v0 * 2 + 0] = 1;
+        uvArray[v0 * 2 + 1] = t;
+
+        // outer vertex
+        uvArray[v1 * 2 + 0] = 0;
+        uvArray[v1 * 2 + 1] = t;
+    }
+
+    for (let r = 0; r < rowCount - 1; r++) {
+        const a = r * 2;
+        const b = a + 1;
+        const c = a + 2;
+        const d = a + 3;
+
+        indices.push(a, b, c);
+        indices.push(c, b, d);
+    }
+
+    const geom = new THREE.BufferGeometry();
+    const pos = new THREE.BufferAttribute(positionArray, 3);
+    pos.setUsage(THREE.DynamicDrawUsage);
+
+    geom.setAttribute('position', pos);
+    geom.setAttribute('uv', new THREE.BufferAttribute(uvArray, 2));
+    geom.setIndex(indices);
+
+    return { geometry: geom, positions: pos };
+}
 
 
-            colorArray[
-                baseIndex + 2
-            ] =
-                brightness;
+// ==========================================================
+// CREATE SIDE EDGE DETAIL MESHES
+// ==========================================================
 
+function createSideEdgeDetails() {
+    makeFrayAlphaTextures();
+
+    // Selvage strips
+    {
+        const leftData = createStripGeometry(ROWS);
+        leftSelvageGeometry = leftData.geometry;
+        leftSelvagePositions = leftData.positions;
+
+        const rightData = createStripGeometry(ROWS);
+        rightSelvageGeometry = rightData.geometry;
+        rightSelvagePositions = rightData.positions;
+
+        const selvageMaterial = new THREE.MeshPhysicalMaterial({
+            color: SELVAGE_COLOR,
+            roughness: 0.90,
+            metalness: 0.0,
+            sheen: 0.12,
+            sheenColor: new THREE.Color(0xa18878),
+            sheenRoughness: 0.88,
+            specularIntensity: 0.10,
+            envMapIntensity: 0.05,
+            side: THREE.DoubleSide
+        });
+
+        leftSelvageMesh = new THREE.Mesh(leftSelvageGeometry, selvageMaterial);
+        rightSelvageMesh = new THREE.Mesh(rightSelvageGeometry, selvageMaterial.clone());
+
+        leftSelvageMesh.receiveShadow = true;
+        rightSelvageMesh.receiveShadow = true;
+
+        leftSelvageMesh.castShadow = false;
+        rightSelvageMesh.castShadow = false;
+
+        leftSelvageMesh.frustumCulled = false;
+        rightSelvageMesh.frustumCulled = false;
+
+        leftSelvageMesh.renderOrder = 1;
+        rightSelvageMesh.renderOrder = 1;
+
+        scene.add(leftSelvageMesh);
+        scene.add(rightSelvageMesh);
+    }
+
+    // Soft alpha fray strips
+    {
+        const leftData = createStripGeometry(ROWS);
+        leftFrayGeometry = leftData.geometry;
+        leftFrayPositions = leftData.positions;
+
+        const rightData = createStripGeometry(ROWS);
+        rightFrayGeometry = rightData.geometry;
+        rightFrayPositions = rightData.positions;
+
+        const leftFrayMaterial = new THREE.MeshPhysicalMaterial({
+            color: FRAY_COLOR,
+            alphaMap: leftFrayAlphaTexture,
+            transparent: true,
+            opacity: 1.0,
+            alphaTest: 0.06,
+            depthWrite: false,
+            roughness: 0.98,
+            metalness: 0.0,
+            sheen: 0.10,
+            sheenColor: new THREE.Color(0xf3ebe0),
+            sheenRoughness: 0.96,
+            specularIntensity: 0.05,
+            envMapIntensity: 0.02,
+            side: THREE.DoubleSide
+        });
+
+        const rightFrayMaterial = new THREE.MeshPhysicalMaterial({
+            color: FRAY_COLOR,
+            alphaMap: rightFrayAlphaTexture,
+            transparent: true,
+            opacity: 1.0,
+            alphaTest: 0.06,
+            depthWrite: false,
+            roughness: 0.98,
+            metalness: 0.0,
+            sheen: 0.10,
+            sheenColor: new THREE.Color(0xf3ebe0),
+            sheenRoughness: 0.96,
+            specularIntensity: 0.05,
+            envMapIntensity: 0.02,
+            side: THREE.DoubleSide
+        });
+
+        leftFrayMesh = new THREE.Mesh(leftFrayGeometry, leftFrayMaterial);
+        rightFrayMesh = new THREE.Mesh(rightFrayGeometry, rightFrayMaterial);
+
+        leftFrayMesh.castShadow = false;
+        rightFrayMesh.castShadow = false;
+
+        leftFrayMesh.receiveShadow = true;
+        rightFrayMesh.receiveShadow = true;
+
+        leftFrayMesh.frustumCulled = false;
+        rightFrayMesh.frustumCulled = false;
+
+        leftFrayMesh.renderOrder = 2;
+        rightFrayMesh.renderOrder = 2;
+
+        scene.add(leftFrayMesh);
+        scene.add(rightFrayMesh);
+    }
+
+    updateSideEdgeDetails();
+}
+
+
+// ==========================================================
+// UPDATE SIDE EDGE DETAIL GEOMETRY
+// ==========================================================
+
+function updateSideEdgeDetails() {
+    if (
+        !leftSelvageGeometry ||
+        !rightSelvageGeometry ||
+        !leftFrayGeometry ||
+        !rightFrayGeometry
+    ) {
+        return;
+    }
+
+    const topArray = geometry.attributes.position.array;
+
+    // ------------------------------------------------------
+    // LEFT SIDE
+    // ------------------------------------------------------
+    for (let y = 0; y < ROWS; y++) {
+        const edgeIndex = indexOf(0, y);
+        const innerIndex = indexOf(1, y);
+
+        const edgeBase = edgeIndex * 3;
+        const innerBase = innerIndex * 3;
+
+        const edgeX = topArray[edgeBase + 0];
+        const edgeY = topArray[edgeBase + 1];
+        const edgeZ = topArray[edgeBase + 2];
+
+        const innerX = topArray[innerBase + 0];
+        const innerY = topArray[innerBase + 1];
+        const innerZ = topArray[innerBase + 2];
+
+        let inwardX = innerX - edgeX;
+        let inwardY = innerY - edgeY;
+        let inwardLen = Math.sqrt(inwardX * inwardX + inwardY * inwardY);
+
+        if (inwardLen < 0.0001) inwardLen = 1.0;
+        inwardX /= inwardLen;
+        inwardY /= inwardLen;
+
+        const outwardX = -inwardX;
+        const outwardY = -inwardY;
+
+        const wave = Math.sin(y * FRAY_WAVE_FREQ + 0.8) * FRAY_WAVE_AMPLITUDE;
+
+        // Selvage (subtle woven side band)
+        {
+            const dst = y * 6;
+
+            const outerX = edgeX + inwardX * 0.004;
+            const outerY = edgeY + inwardY * 0.004;
+            const outerZ = edgeZ + SELVAGE_Z_LIFT;
+
+            const innerBandX = edgeX + inwardX * SELVAGE_WIDTH;
+            const innerBandY = edgeY + inwardY * SELVAGE_WIDTH;
+            const innerBandZ = lerp(edgeZ, innerZ, 0.85) + SELVAGE_Z_LIFT;
+
+            leftSelvagePositions.array[dst + 0] = outerX;
+            leftSelvagePositions.array[dst + 1] = outerY;
+            leftSelvagePositions.array[dst + 2] = outerZ;
+
+            leftSelvagePositions.array[dst + 3] = innerBandX;
+            leftSelvagePositions.array[dst + 4] = innerBandY;
+            leftSelvagePositions.array[dst + 5] = innerBandZ;
         }
 
+        // Fray strip
+        {
+            const dst = y * 6;
+
+            const innerStripX = edgeX + outwardX * FRAY_ATTACH_OUTSET;
+            const innerStripY = edgeY + outwardY * FRAY_ATTACH_OUTSET;
+            const innerStripZ = edgeZ - FRAY_Z_SINK;
+
+            const outerStripX =
+                edgeX +
+                outwardX * (FRAY_STRIP_WIDTH + wave * 0.45);
+
+            const outerStripY =
+                edgeY +
+                outwardY * (FRAY_STRIP_WIDTH + wave * 0.45) +
+                wave * 0.12;
+
+            const outerStripZ =
+                edgeZ -
+                FRAY_Z_SINK -
+                FRAY_OUTER_DROOP;
+
+            leftFrayPositions.array[dst + 0] = innerStripX;
+            leftFrayPositions.array[dst + 1] = innerStripY;
+            leftFrayPositions.array[dst + 2] = innerStripZ;
+
+            leftFrayPositions.array[dst + 3] = outerStripX;
+            leftFrayPositions.array[dst + 4] = outerStripY;
+            leftFrayPositions.array[dst + 5] = outerStripZ;
+        }
     }
 
+    // ------------------------------------------------------
+    // RIGHT SIDE
+    // ------------------------------------------------------
+    for (let y = 0; y < ROWS; y++) {
+        const edgeIndex = indexOf(COLS - 1, y);
+        const innerIndex = indexOf(COLS - 2, y);
 
-    vertexColors.needsUpdate =
-        true;
+        const edgeBase = edgeIndex * 3;
+        const innerBase = innerIndex * 3;
 
-}
+        const edgeX = topArray[edgeBase + 0];
+        const edgeY = topArray[edgeBase + 1];
+        const edgeZ = topArray[edgeBase + 2];
 
+        const innerX = topArray[innerBase + 0];
+        const innerY = topArray[innerBase + 1];
+        const innerZ = topArray[innerBase + 2];
 
-// ==========================================================
-// BUILD SIDE FRAY SPECS
-// ==========================================================
+        let inwardX = innerX - edgeX;
+        let inwardY = innerY - edgeY;
+        let inwardLen = Math.sqrt(inwardX * inwardX + inwardY * inwardY);
 
-function buildSideFraySpecs(
-    sideSign
-) {
+        if (inwardLen < 0.0001) inwardLen = 1.0;
+        inwardX /= inwardLen;
+        inwardY /= inwardLen;
 
-    const specs =
-        [];
+        const outwardX = -inwardX;
+        const outwardY = -inwardY;
 
+        const wave = Math.sin(y * FRAY_WAVE_FREQ + 1.7) * FRAY_WAVE_AMPLITUDE;
 
-    for (
+        // Selvage
+        {
+            const dst = y * 6;
 
-        let i = 0;
+            const outerX = edgeX + inwardX * 0.004;
+            const outerY = edgeY + inwardY * 0.004;
+            const outerZ = edgeZ + SELVAGE_Z_LIFT;
 
-        i <
-        SIDE_FRAY_STRANDS_PER_SIDE;
+            const innerBandX = edgeX + inwardX * SELVAGE_WIDTH;
+            const innerBandY = edgeY + inwardY * SELVAGE_WIDTH;
+            const innerBandZ = lerp(edgeZ, innerZ, 0.85) + SELVAGE_Z_LIFT;
 
-        i++
+            rightSelvagePositions.array[dst + 0] = outerX;
+            rightSelvagePositions.array[dst + 1] = outerY;
+            rightSelvagePositions.array[dst + 2] = outerZ;
 
-    ) {
-
-        const tBase =
-
-            SIDE_FRAY_STRANDS_PER_SIDE <=
-            1
-
-                ?
-
-                0.5
-
-                :
-
-                i /
-
-                (
-                    SIDE_FRAY_STRANDS_PER_SIDE -
-                    1
-                );
-
-
-        const r1 =
-            randomFromSeed(
-
-                1000 +
-
-                i *
-                1.371 +
-
-                sideSign *
-                11.0
-
-            );
-
-
-        const r2 =
-            randomFromSeed(
-
-                2000 +
-
-                i *
-                2.173 +
-
-                sideSign *
-                13.0
-
-            );
-
-
-        const r3 =
-            randomFromSeed(
-
-                3000 +
-
-                i *
-                3.913 +
-
-                sideSign *
-                17.0
-
-            );
-
-
-        const r4 =
-            randomFromSeed(
-
-                4000 +
-
-                i *
-                5.117 +
-
-                sideSign *
-                19.0
-
-            );
-
-
-        const r5 =
-            randomFromSeed(
-
-                5000 +
-
-                i *
-                7.331 +
-
-                sideSign *
-                23.0
-
-            );
-
-
-        let length =
-
-            lerp(
-
-                SIDE_FRAY_MIN_LENGTH,
-
-                SIDE_FRAY_MAX_LENGTH,
-
-                Math.pow(
-                    r1,
-                    1.5
-                )
-
-            );
-
-
-        // Create occasional tiny/gapped strands.
-        if (
-
-            r5 <
-            SIDE_FRAY_GAP_CHANCE
-
-        ) {
-
-            length *=
-                SIDE_FRAY_GAP_LENGTH_SCALE;
-
+            rightSelvagePositions.array[dst + 3] = innerBandX;
+            rightSelvagePositions.array[dst + 4] = innerBandY;
+            rightSelvagePositions.array[dst + 5] = innerBandZ;
         }
 
+        // Fray strip
+        {
+            const dst = y * 6;
 
-        specs.push({
+            const innerStripX = edgeX + outwardX * FRAY_ATTACH_OUTSET;
+            const innerStripY = edgeY + outwardY * FRAY_ATTACH_OUTSET;
+            const innerStripZ = edgeZ - FRAY_Z_SINK;
 
-            t:
+            const outerStripX =
+                edgeX +
+                outwardX * (FRAY_STRIP_WIDTH + wave * 0.45);
 
-                clamp01(
+            const outerStripY =
+                edgeY +
+                outwardY * (FRAY_STRIP_WIDTH + wave * 0.45) +
+                wave * 0.12;
 
-                    tBase
+            const outerStripZ =
+                edgeZ -
+                FRAY_Z_SINK -
+                FRAY_OUTER_DROOP;
 
-                    +
+            rightFrayPositions.array[dst + 0] = innerStripX;
+            rightFrayPositions.array[dst + 1] = innerStripY;
+            rightFrayPositions.array[dst + 2] = innerStripZ;
 
-                    (
-                        r2 -
-                        0.5
-                    )
-
-                    *
-
-                    0.012
-
-                ),
-
-
-            length:
-
-
-                length,
-
-
-            width:
-
-                lerp(
-
-                    SIDE_FRAY_MIN_WIDTH,
-
-                    SIDE_FRAY_MAX_WIDTH,
-
-                    r3
-
-                ),
-
-
-            baseYOffset:
-
-                (
-                    r4 -
-                    0.5
-                )
-
-                *
-
-                SIDE_FRAY_Y_JITTER,
-
-
-            tipYSway:
-
-                (
-                    r2 -
-                    0.5
-                )
-
-                *
-
-                SIDE_FRAY_TIP_Y_SWAY,
-
-
-            zJitter:
-
-                (
-                    r3 -
-                    0.5
-                )
-
-                *
-
-                SIDE_FRAY_Z_JITTER
-
-        });
-
+            rightFrayPositions.array[dst + 3] = outerStripX;
+            rightFrayPositions.array[dst + 4] = outerStripY;
+            rightFrayPositions.array[dst + 5] = outerStripZ;
+        }
     }
 
-
-    return specs;
-
-}
-
-
-// ==========================================================
-// CREATE SIDE FRAY SYSTEM
-// ==========================================================
-
-function createSideFraySystem() {
-
-    leftFraySpecs =
-        buildSideFraySpecs(
-            -1
-        );
-
-
-    rightFraySpecs =
-        buildSideFraySpecs(
-            1
-        );
-
-
-    createSideBandMeshes();
-
-    createSideFrayMeshes();
-
-    updateSideFrayGeometry();
-
-}
-
-
-// ==========================================================
-// CREATE WOVEN SIDE BANDS
-// ==========================================================
-
-function createSideBandMeshes() {
-
-    const stripVertexCount =
-        ROWS *
-        2;
-
-
-    const stripIndices =
-        [];
-
-
-    for (
-
-        let y = 0;
-
-        y < ROWS - 1;
-
-        y++
-
-    ) {
-
-        const a =
-            y *
-            2;
-
-
-        const b =
-            a +
-            1;
-
-
-        const c =
-            a +
-            2;
-
-
-        const d =
-            a +
-            3;
-
-
-        stripIndices.push(
-
-            a,
-            b,
-            c,
-
-            b,
-            d,
-            c
-
-        );
-
-    }
-
-
-    function makeBandGeometry() {
-
-        const g =
-            new THREE.BufferGeometry();
-
-
-        const p =
-            new THREE.BufferAttribute(
-
-                new Float32Array(
-
-                    stripVertexCount *
-                    3
-
-                ),
-
-                3
-
-            );
-
-
-        p.setUsage(
-            THREE.DynamicDrawUsage
-        );
-
-
-        g.setAttribute(
-
-            'position',
-
-            p
-
-        );
-
-
-        g.setIndex(
-            stripIndices
-        );
-
-
-        return {
-
-            geometry:
-                g,
-
-            positions:
-                p
-
-        };
-
-    }
-
-
-    const left =
-        makeBandGeometry();
-
-
-    sideBandGeometryLeft =
-        left.geometry;
-
-
-    sideBandPositionsLeft =
-        left.positions;
-
-
-    const right =
-        makeBandGeometry();
-
-
-    sideBandGeometryRight =
-        right.geometry;
-
-
-    sideBandPositionsRight =
-        right.positions;
-
-
-    const bandMaterial =
-        new THREE.MeshPhysicalMaterial({
-
-            color:
-                SIDE_BAND_COLOR,
-
-
-            metalness:
-                0,
-
-
-            roughness:
-                0.90,
-
-
-            sheen:
-                0.10,
-
-
-            sheenColor:
-                new THREE.Color(
-                    0x9a756d
-                ),
-
-
-            sheenRoughness:
-                0.95,
-
-
-            specularIntensity:
-                0.12,
-
-
-            envMapIntensity:
-                0.05,
-
-
-            side:
-                THREE.DoubleSide
-
-        });
-
-
-    sideBandMeshLeft =
-        new THREE.Mesh(
-
-            sideBandGeometryLeft,
-
-            bandMaterial
-
-        );
-
-
-    sideBandMeshRight =
-        new THREE.Mesh(
-
-            sideBandGeometryRight,
-
-            bandMaterial.clone()
-
-        );
-
-
-    for (
-        const mesh of [
-
-            sideBandMeshLeft,
-
-            sideBandMeshRight
-
-        ]
-    ) {
-
-        mesh.castShadow =
-            true;
-
-
-        mesh.receiveShadow =
-            true;
-
-
-        mesh.frustumCulled =
-            false;
-
-
-        scene.add(
-            mesh
-        );
-
-    }
-
-}
-
-
-// ==========================================================
-// CREATE SIDE FRAY FIBERS
-// ==========================================================
-
-function createSideFrayMeshes() {
-
-    const strandCount =
-        SIDE_FRAY_STRANDS_PER_SIDE;
-
-
-    const indexArray =
-        [];
-
-
-    for (
-
-        let i = 0;
-
-        i < strandCount;
-
-        i++
-
-    ) {
-
-        const base =
-            i *
-            4;
-
-
-        indexArray.push(
-
-            base + 0,
-            base + 1,
-            base + 2,
-
-            base + 2,
-            base + 1,
-            base + 3
-
-        );
-
-    }
-
-
-    function makeFrayGeometry() {
-
-        const g =
-            new THREE.BufferGeometry();
-
-
-        const p =
-            new THREE.BufferAttribute(
-
-                new Float32Array(
-
-                    strandCount *
-                    4 *
-                    3
-
-                ),
-
-                3
-
-            );
-
-
-        p.setUsage(
-            THREE.DynamicDrawUsage
-        );
-
-
-        g.setAttribute(
-
-            'position',
-
-            p
-
-        );
-
-
-        g.setIndex(
-            indexArray
-        );
-
-
-        return {
-
-            geometry:
-                g,
-
-            positions:
-                p
-
-        };
-
-    }
-
-
-    const left =
-        makeFrayGeometry();
-
-
-    sideFrayGeometryLeft =
-        left.geometry;
-
-
-    sideFrayPositionsLeft =
-        left.positions;
-
-
-    const right =
-        makeFrayGeometry();
-
-
-    sideFrayGeometryRight =
-        right.geometry;
-
-
-    sideFrayPositionsRight =
-        right.positions;
-
-
-    const frayMaterial =
-        new THREE.MeshPhysicalMaterial({
-
-            color:
-                SIDE_FRAY_COLOR,
-
-
-            metalness:
-                0,
-
-
-            roughness:
-                0.98,
-
-
-            sheen:
-                0.04,
-
-
-            sheenColor:
-                new THREE.Color(
-                    0xf3ede4
-                ),
-
-
-            sheenRoughness:
-                1.0,
-
-
-            specularIntensity:
-                0.08,
-
-
-            envMapIntensity:
-                0.02,
-
-
-            side:
-                THREE.DoubleSide
-
-        });
-
-
-    sideFrayMeshLeft =
-        new THREE.Mesh(
-
-            sideFrayGeometryLeft,
-
-            frayMaterial
-
-        );
-
-
-    sideFrayMeshRight =
-        new THREE.Mesh(
-
-            sideFrayGeometryRight,
-
-            frayMaterial.clone()
-
-        );
-
-
-    for (
-        const mesh of [
-
-            sideFrayMeshLeft,
-
-            sideFrayMeshRight
-
-        ]
-    ) {
-
-        mesh.castShadow =
-            true;
-
-
-        mesh.receiveShadow =
-            true;
-
-
-        mesh.frustumCulled =
-            false;
-
-
-        scene.add(
-            mesh
-        );
-
-    }
-
-}
-
-
-// ==========================================================
-// UPDATE SIDE SELVAGE / FRAY
-// ==========================================================
-
-function updateSideFrayGeometry() {
-
-    updateSideBandGeometry();
-
-    updateSideFiberGeometry();
-
-}
-
-
-// ==========================================================
-// UPDATE SIDE BANDS
-// ==========================================================
-
-function updateSideBandGeometry() {
-
-    if (
-
-        !sideBandPositionsLeft ||
-
-        !sideBandPositionsRight
-
-    ) {
-
-        return;
-
-    }
-
-
-    const leftArray =
-        sideBandPositionsLeft.array;
-
-
-    const rightArray =
-        sideBandPositionsRight.array;
-
-
-    const temp =
-        new THREE.Vector3();
-
-
-    for (
-
-        let y = 0;
-
-        y < ROWS;
-
-        y++
-
-    ) {
-
-        const t =
-
-            y /
-
-            (
-                ROWS -
-                1
-            );
-
-
-        // ==================================================
-        // LEFT
-        // ==================================================
-
-        sampleSideEdgePosition(
-
-            -1,
-
-            t,
-
-            temp
-
-        );
-
-
-        let base =
-            y *
-            6;
-
-
-        // Slight overlap under the main rug hides seams.
-        leftArray[
-            base + 0
-        ] =
-
-            temp.x +
-
-            SIDE_BAND_OVERLAP;
-
-
-        leftArray[
-            base + 1
-        ] =
-            temp.y;
-
-
-        leftArray[
-            base + 2
-        ] =
-
-            temp.z -
-
-            SIDE_BAND_Z_SINK_INNER;
-
-
-        // Outer edge of woven selvage.
-        leftArray[
-            base + 3
-        ] =
-
-            temp.x -
-
-            SIDE_BAND_WIDTH;
-
-
-        leftArray[
-            base + 4
-        ] =
-            temp.y;
-
-
-        leftArray[
-            base + 5
-        ] =
-
-            temp.z -
-
-            SIDE_BAND_Z_SINK_OUTER;
-
-
-        // ==================================================
-        // RIGHT
-        // ==================================================
-
-        sampleSideEdgePosition(
-
-            1,
-
-            t,
-
-            temp
-
-        );
-
-
-        base =
-            y *
-            6;
-
-
-        rightArray[
-            base + 0
-        ] =
-
-            temp.x -
-
-            SIDE_BAND_OVERLAP;
-
-
-        rightArray[
-            base + 1
-        ] =
-            temp.y;
-
-
-        rightArray[
-            base + 2
-        ] =
-
-            temp.z -
-
-            SIDE_BAND_Z_SINK_INNER;
-
-
-        rightArray[
-            base + 3
-        ] =
-
-            temp.x +
-
-            SIDE_BAND_WIDTH;
-
-
-        rightArray[
-            base + 4
-        ] =
-            temp.y;
-
-
-        rightArray[
-            base + 5
-        ] =
-
-            temp.z -
-
-            SIDE_BAND_Z_SINK_OUTER;
-
-    }
-
-
-    sideBandPositionsLeft.needsUpdate =
-        true;
-
-
-    sideBandPositionsRight.needsUpdate =
-        true;
-
-
-    sideBandGeometryLeft.computeVertexNormals();
-
-    sideBandGeometryRight.computeVertexNormals();
-
-}
-
-
-// ==========================================================
-// UPDATE ONE SIDE OF FRAY
-// ==========================================================
-
-function updateOneSideFray(
-
-    sideSign,
-
-    specs,
-
-    bufferAttribute,
-
-    frayGeometry
-
-) {
-
-    const out =
-        bufferAttribute.array;
-
-
-    const basePos =
-        new THREE.Vector3();
-
-
-    for (
-
-        let i = 0;
-
-        i < specs.length;
-
-        i++
-
-    ) {
-
-        const spec =
-            specs[i];
-
-
-        sampleSideEdgePosition(
-
-            sideSign,
-
-            spec.t,
-
-            basePos
-
-        );
-
-
-        // Outer edge of the woven band.
-        const outerBandX =
-
-            basePos.x
-
-            +
-
-            sideSign *
-            SIDE_BAND_WIDTH;
-
-
-        const baseY =
-
-            basePos.y
-
-            +
-
-            spec.baseYOffset;
-
-
-        const baseZ =
-
-            basePos.z
-
-            -
-
-            SIDE_BAND_Z_SINK_OUTER
-
-            +
-
-            spec.zJitter *
-            0.35;
-
-
-        // Short irregular thread tip.
-        const tipX =
-
-            outerBandX
-
-            +
-
-            sideSign *
-            spec.length;
-
-
-        const tipY =
-
-            baseY
-
-            +
-
-            spec.tipYSway;
-
-
-        const tipZ =
-
-            baseZ
-
-            -
-
-            SIDE_FRAY_TIP_SINK
-
-            +
-
-            spec.zJitter;
-
-
-        const halfBaseWidth =
-
-            spec.width *
-            0.50;
-
-
-        const halfTipWidth =
-
-            spec.width *
-            0.16;
-
-
-        const dst =
-            i *
-            12;
-
-
-        // --------------------------------------------------
-        // BASE LOWER
-        // --------------------------------------------------
-
-        out[
-            dst + 0
-        ] =
-
-            outerBandX
-
-            -
-
-            sideSign *
-            SIDE_FRAY_BASE_OVERLAP;
-
-
-        out[
-            dst + 1
-        ] =
-
-            baseY
-
-            -
-
-            halfBaseWidth;
-
-
-        out[
-            dst + 2
-        ] =
-            baseZ;
-
-
-        // --------------------------------------------------
-        // BASE UPPER
-        // --------------------------------------------------
-
-        out[
-            dst + 3
-        ] =
-
-            outerBandX
-
-            -
-
-            sideSign *
-            SIDE_FRAY_BASE_OVERLAP;
-
-
-        out[
-            dst + 4
-        ] =
-
-            baseY
-
-            +
-
-            halfBaseWidth;
-
-
-        out[
-            dst + 5
-        ] =
-            baseZ;
-
-
-        // --------------------------------------------------
-        // TIP LOWER
-        // --------------------------------------------------
-
-        out[
-            dst + 6
-        ] =
-            tipX;
-
-
-        out[
-            dst + 7
-        ] =
-
-            tipY
-
-            -
-
-            halfTipWidth;
-
-
-        out[
-            dst + 8
-        ] =
-            tipZ;
-
-
-        // --------------------------------------------------
-        // TIP UPPER
-        // --------------------------------------------------
-
-        out[
-            dst + 9
-        ] =
-            tipX;
-
-
-        out[
-            dst + 10
-        ] =
-
-            tipY
-
-            +
-
-            halfTipWidth;
-
-
-        out[
-            dst + 11
-        ] =
-            tipZ;
-
-    }
-
-
-    bufferAttribute.needsUpdate =
-        true;
-
-
-    frayGeometry.computeVertexNormals();
-
-}
-
-
-// ==========================================================
-// UPDATE BOTH SIDES
-// ==========================================================
-
-function updateSideFiberGeometry() {
-
-    if (
-
-        !sideFrayPositionsLeft ||
-
-        !sideFrayPositionsRight
-
-    ) {
-
-        return;
-
-    }
-
-
-    updateOneSideFray(
-
-        -1,
-
-        leftFraySpecs,
-
-        sideFrayPositionsLeft,
-
-        sideFrayGeometryLeft
-
-    );
-
-
-    updateOneSideFray(
-
-        1,
-
-        rightFraySpecs,
-
-        sideFrayPositionsRight,
-
-        sideFrayGeometryRight
-
-    );
-
+    leftSelvagePositions.needsUpdate = true;
+    rightSelvagePositions.needsUpdate = true;
+    leftFrayPositions.needsUpdate = true;
+    rightFrayPositions.needsUpdate = true;
+
+    leftSelvageGeometry.computeVertexNormals();
+    rightSelvageGeometry.computeVertexNormals();
+    leftFrayGeometry.computeVertexNormals();
+    rightFrayGeometry.computeVertexNormals();
 }
 
 
@@ -4620,347 +1365,70 @@ function updateSideFiberGeometry() {
 // ==========================================================
 
 function updateGeometry() {
+    const speed01 = visualSpeed01;
 
-    const speed01 =
-        visualSpeed01;
+    const foldAmplitude = lerp(MIN_FOLD_AMPLITUDE, MAX_FOLD_AMPLITUDE, speed01) * interactionPresence;
+    const foldLength = lerp(MIN_FOLD_LENGTH, MAX_FOLD_LENGTH, speed01);
+    const foldWidth = lerp(MIN_FOLD_WIDTH, MAX_FOLD_WIDTH, speed01);
+    const dragAmount = lerp(MIN_DRAG_AMOUNT, MAX_DRAG_AMOUNT, speed01) * interactionPresence;
 
+    const halfWidth = RUG_WIDTH / 2;
+    const halfHeight = RUG_HEIGHT / 2;
 
-    const foldAmplitude =
+    for (let i = 0; i < positions.count; i++) {
+        const baseX = restX[i];
+        const baseY = restY[i];
 
-        lerp(
+        let finalX = baseX;
+        let finalY = baseY;
+        let foldZ = 0;
 
-            MIN_FOLD_AMPLITUDE,
+        const edgeDistanceX = halfWidth - Math.abs(baseX);
+        const edgeDistanceY = halfHeight - Math.abs(baseY);
 
-            MAX_FOLD_AMPLITUDE,
-
-            speed01
-
-        )
-
-        *
-
-        interactionPresence;
-
-
-    const foldLength =
-
-        lerp(
-
-            MIN_FOLD_LENGTH,
-
-            MAX_FOLD_LENGTH,
-
-            speed01
-
+        // folds fade before the exact border
+        const edgeFade = smoothstep01(
+            Math.min(edgeDistanceX / 0.45, edgeDistanceY / 0.45)
         );
 
-
-    const foldWidth =
-
-        lerp(
-
-            MIN_FOLD_WIDTH,
-
-            MAX_FOLD_WIDTH,
-
-            speed01
-
-        );
-
-
-    const dragAmount =
-
-        lerp(
-
-            MIN_DRAG_AMOUNT,
-
-            MAX_DRAG_AMOUNT,
-
-            speed01
-
-        )
-
-        *
-
-        interactionPresence;
-
-
-    const halfWidth =
-        RUG_WIDTH /
-        2;
-
-
-    const halfHeight =
-        RUG_HEIGHT /
-        2;
-
-
-    for (
-
-        let i = 0;
-
-        i < positions.count;
-
-        i++
-
-    ) {
-
-        const baseX =
-            restX[i];
-
-
-        const baseY =
-            restY[i];
-
-
-        let finalX =
-            baseX;
-
-
-        let finalY =
-            baseY;
-
-
-        let foldZ =
-            0;
-
-
-        const edgeDistanceX =
-
-            halfWidth -
-
-            Math.abs(
-                baseX
-            );
-
-
-        const edgeDistanceY =
-
-            halfHeight -
-
-            Math.abs(
-                baseY
-            );
-
-
-        // Keep the real outer edge calm.
-        const edgeFade =
-
-            smoothstep01(
-
-                Math.min(
-
-                    edgeDistanceX /
-                    0.45,
-
-                    edgeDistanceY /
-                    0.45
-
-                )
-
-            );
-
-
-        if (
-
-            interactionPresence >
-
-            0.001
-
-        ) {
-
-            const dx =
-
-                baseX -
-                smoothPointerX;
-
-
-            const dy =
-
-                baseY -
-                smoothPointerY;
-
-
-            const along =
-
-                dx *
-                motionDirX
-
-                +
-
-                dy *
-                motionDirY;
-
-
-            const across =
-
-                -dx *
-                motionDirY
-
-                +
-
-                dy *
-                motionDirX;
-
+        if (interactionPresence > 0.001) {
+            const dx = baseX - smoothPointerX;
+            const dy = baseY - smoothPointerY;
+
+            const along = dx * motionDirX + dy * motionDirY;
+            const across = -dx * motionDirY + dy * motionDirX;
 
             const directionalLength =
-
                 along < 0
+                    ? foldLength * 1.25
+                    : foldLength * 0.78;
 
-                    ?
+            const envelope = Math.exp(-(
+                (along * along) / (2 * directionalLength * directionalLength) +
+                (across * across) / (2 * foldWidth * foldWidth)
+            ));
 
-                    foldLength *
-                    1.25
+            const fold1 = Math.sin(across * FOLD_FREQUENCY_1 + along * 0.75);
+            const fold2 = Math.sin(across * FOLD_FREQUENCY_2 - along * 1.35 + 0.85);
 
-                    :
+            const combinedFold = fold1 * 0.68 + fold2 * 0.32;
 
-                    foldLength *
-                    0.78;
+            foldZ = combinedFold * foldAmplitude * envelope * edgeFade;
 
+            const dragEnvelope = envelope * edgeFade;
 
-            const envelope =
-
-                Math.exp(
-
-                    -(
-
-                        (
-                            along *
-                            along
-                        )
-
-                        /
-
-                        (
-                            2 *
-                            directionalLength *
-                            directionalLength
-                        )
-
-                        +
-
-                        (
-                            across *
-                            across
-                        )
-
-                        /
-
-                        (
-                            2 *
-                            foldWidth *
-                            foldWidth
-                        )
-
-                    )
-
-                );
-
-
-            const fold1 =
-
-                Math.sin(
-
-                    across *
-                    FOLD_FREQUENCY_1
-
-                    +
-
-                    along *
-                    0.75
-
-                );
-
-
-            const fold2 =
-
-                Math.sin(
-
-                    across *
-                    FOLD_FREQUENCY_2
-
-                    -
-
-                    along *
-                    1.35
-
-                    +
-
-                    0.85
-
-                );
-
-
-            const combinedFold =
-
-                fold1 *
-                0.68
-
-                +
-
-                fold2 *
-                0.32;
-
-
-            foldZ =
-
-                combinedFold *
-                foldAmplitude *
-                envelope *
-                edgeFade;
-
-
-            const dragEnvelope =
-
-                envelope *
-                edgeFade;
-
-
-            finalX +=
-
-                motionDirX *
-                dragAmount *
-                dragEnvelope;
-
-
-            finalY +=
-
-                motionDirY *
-                dragAmount *
-                dragEnvelope;
-
+            finalX += motionDirX * dragAmount * dragEnvelope;
+            finalY += motionDirY * dragAmount * dragEnvelope;
         }
 
-
-        positions.setXYZ(
-
-            i,
-
-            finalX,
-
-            finalY,
-
-            restZ[i] +
-            height[i] +
-            foldZ
-
-        );
-
+        positions.setXYZ(i, finalX, finalY, restZ[i] + height[i] + foldZ);
     }
 
-
-    positions.needsUpdate =
-        true;
-
+    positions.needsUpdate = true;
 
     geometry.computeVertexNormals();
-
-
     updateDynamicOcclusion();
-
-
-    updateSideFrayGeometry();
-
+    updateSideEdgeDetails();
 }
 
 
@@ -4969,272 +1437,90 @@ function updateGeometry() {
 // ==========================================================
 
 async function createRug() {
+    const [silkMaps, normalMap] = await Promise.all([
+        createV10SilkMaps(),
+        loadTexture('./textures/rug_normal.png')
+    ]);
 
-    const [
-        silkMaps,
-        normalMap
-    ] =
-        await Promise.all([
+    normalMap.colorSpace = THREE.NoColorSpace;
+    configureTexture(normalMap);
 
-            createV10SilkMaps(),
-
-            loadTexture(
-                './textures/rug_normal.png'
-            )
-
-        ]);
-
-
-    normalMap.colorSpace =
-        THREE.NoColorSpace;
-
-
-    configureTexture(
-        normalMap
+    geometry = new THREE.PlaneGeometry(
+        RUG_WIDTH,
+        RUG_HEIGHT,
+        SEGMENTS_X,
+        SEGMENTS_Y
     );
 
-
-    geometry =
-        new THREE.PlaneGeometry(
-
-            RUG_WIDTH,
-
-            RUG_HEIGHT,
-
-            SEGMENTS_X,
-
-            SEGMENTS_Y
-
-        );
-
-
-    const colorArray =
-        new Float32Array(
-
-            geometry
-                .attributes
-                .position
-                .count
-
-            *
-
-            3
-
-        );
-
-
-    colorArray.fill(
-        1.0
+    const colorArray = new Float32Array(
+        geometry.attributes.position.count * 3
     );
 
+    colorArray.fill(1.0);
 
-    vertexColors =
-        new THREE.BufferAttribute(
+    vertexColors = new THREE.BufferAttribute(colorArray, 3);
+    vertexColors.setUsage(THREE.DynamicDrawUsage);
+    geometry.setAttribute('color', vertexColors);
 
-            colorArray,
+    const material = new THREE.MeshPhysicalMaterial({
+        map: silkMaps.colorTexture,
 
-            3
+        metalness: 1.0,
+        metalnessMap: silkMaps.metalnessTexture,
 
-        );
+        roughness: 1.0,
+        roughnessMap: silkMaps.roughnessTexture,
 
+        normalMap: normalMap,
+        normalScale: new THREE.Vector2(0.8, -0.8),
 
-    vertexColors.setUsage(
-        THREE.DynamicDrawUsage
-    );
+        anisotropy: SILK_ANISOTROPY,
+        anisotropyRotation: SILK_ANISOTROPY_ROTATION,
 
+        sheen: SILK_SHEEN,
+        sheenColor: new THREE.Color(0xd1a987),
+        sheenRoughness: SILK_SHEEN_ROUGHNESS,
 
-    geometry.setAttribute(
+        specularIntensity: 0.58,
+        specularColor: new THREE.Color(0xffead2),
 
-        'color',
+        clearcoat: 0,
+        envMapIntensity: ENVIRONMENT_INTENSITY,
 
-        vertexColors
+        vertexColors: true,
+        side: THREE.DoubleSide
+    });
 
-    );
+    material.shadowSide = THREE.DoubleSide;
 
+    rug = new THREE.Mesh(geometry, material);
+    rug.castShadow = true;
+    rug.receiveShadow = true;
+    rug.frustumCulled = false;
+    rug.renderOrder = 0;
 
-    // ------------------------------------------------------
-    // SILK MATERIAL
-    // ------------------------------------------------------
-
-    const material =
-        new THREE.MeshPhysicalMaterial({
-
-            map:
-                silkMaps.colorTexture,
-
-
-            metalness:
-                1.0,
-
-
-            metalnessMap:
-                silkMaps.metalnessTexture,
-
-
-            roughness:
-                1.0,
-
-
-            roughnessMap:
-                silkMaps.roughnessTexture,
-
-
-            normalMap:
-                normalMap,
-
-
-            normalScale:
-                new THREE.Vector2(
-                    0.8,
-                    -0.8
-                ),
-
-
-            anisotropy:
-                SILK_ANISOTROPY,
-
-
-            anisotropyRotation:
-                SILK_ANISOTROPY_ROTATION,
-
-
-            sheen:
-                SILK_SHEEN,
-
-
-            sheenColor:
-                new THREE.Color(
-                    0xd1a987
-                ),
-
-
-            sheenRoughness:
-                SILK_SHEEN_ROUGHNESS,
-
-
-            specularIntensity:
-                0.58,
-
-
-            specularColor:
-                new THREE.Color(
-                    0xffead2
-                ),
-
-
-            clearcoat:
-                0,
-
-
-            envMapIntensity:
-                ENVIRONMENT_INTENSITY,
-
-
-            vertexColors:
-                true,
-
-
-            side:
-                THREE.DoubleSide
-
-        });
-
-
-    material.shadowSide =
-        THREE.DoubleSide;
-
-
-    rug =
-        new THREE.Mesh(
-
-            geometry,
-
-            material
-
-        );
-
-
-    rug.castShadow =
-        true;
-
-
-    rug.receiveShadow =
-        true;
-
-
-    rug.frustumCulled =
-        false;
-
-
-    scene.add(
-        rug
-    );
-
-
-    // ------------------------------------------------------
-    // PHYSICS
-    // ------------------------------------------------------
+    scene.add(rug);
 
     initializeClothPhysics();
+    createSideEdgeDetails();
 
-
-    // ------------------------------------------------------
-    // SIDE SELVAGE + FRAY
-    // ------------------------------------------------------
-
-    createSideFraySystem();
-
-
-    // ------------------------------------------------------
-    // DEBUG ACCESS
-    // ------------------------------------------------------
-
-    window.rug =
-        rug;
-
-
-    window.rugMaterial =
-        material;
-
-
-    window.porphyraMaps =
-        silkMaps;
-
-
-    window.porphyraSideFray = {
-
-        sideBandMeshLeft,
-
-        sideBandMeshRight,
-
-        sideFrayMeshLeft,
-
-        sideFrayMeshRight,
-
-        leftFraySpecs,
-
-        rightFraySpecs
-
+    window.rug = rug;
+    window.rugMaterial = material;
+    window.porphyraMaps = silkMaps;
+    window.porphyraSideDetails = {
+        leftSelvageMesh,
+        rightSelvageMesh,
+        leftFrayMesh,
+        rightFrayMesh
     };
-
-
     window.porphyraLights = {
-
         warmAreaKey,
-
         shadowKey,
-
         coolFill,
-
         rimLight
-
     };
 
-
-    console.log(
-        'PORPHYRA Cloth v11.4 — SIDE SELVAGE FRAY LOADED'
-    );
-
+    console.log('PORPHYRA Cloth v11.5 — SOFT ALPHA FRAY SIDES LOADED');
 }
 
 
@@ -5243,89 +1529,22 @@ async function createRug() {
 // ==========================================================
 
 function fitCamera() {
-
-    camera.aspect =
-
-        window.innerWidth /
-
-        window.innerHeight;
-
-
+    camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
 
-
-    const fov =
-
-        THREE.MathUtils.degToRad(
-            camera.fov
-        );
-
+    const fov = THREE.MathUtils.degToRad(camera.fov);
 
     const distanceForHeight =
-
-        (
-            RUG_HEIGHT /
-            2
-        )
-
-        /
-
-        Math.tan(
-            fov /
-            2
-        );
-
+        (RUG_HEIGHT / 2) / Math.tan(fov / 2);
 
     const distanceForWidth =
+        (RUG_WIDTH / 2) /
+        (Math.tan(fov / 2) * camera.aspect);
 
-        (
-            RUG_WIDTH /
-            2
-        )
+    const distance = Math.max(distanceForHeight, distanceForWidth);
 
-        /
-
-        (
-            Math.tan(
-                fov /
-                2
-            )
-
-            *
-
-            camera.aspect
-        );
-
-
-    const distance =
-
-        Math.max(
-
-            distanceForHeight,
-
-            distanceForWidth
-
-        );
-
-
-    camera.position.set(
-
-        0,
-
-        0,
-
-        distance *
-        1.12
-
-    );
-
-
-    camera.lookAt(
-        0,
-        0,
-        0
-    );
-
+    camera.position.set(0, 0, distance * 1.12);
+    camera.lookAt(0, 0, 0);
 }
 
 
@@ -5333,98 +1552,34 @@ function fitCamera() {
 // RESIZE
 // ==========================================================
 
-window.addEventListener(
-
-    'resize',
-
-    () => {
-
-        renderer.setPixelRatio(
-
-            Math.min(
-
-                window.devicePixelRatio,
-
-                2
-
-            )
-
-        );
-
-
-        renderer.setSize(
-
-            window.innerWidth,
-
-            window.innerHeight
-
-        );
-
-
-        fitCamera();
-
-    }
-
-);
+window.addEventListener('resize', () => {
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    fitCamera();
+});
 
 
 // ==========================================================
 // START
 // ==========================================================
 
-const loading =
-
-    document.getElementById(
-        'loading'
-    );
-
-
-const errorBox =
-
-    document.getElementById(
-        'error'
-    );
-
+const loading = document.getElementById('loading');
+const errorBox = document.getElementById('error');
 
 try {
-
     fitCamera();
-
-
     await createRug();
 
+    loading.classList.add('hidden');
 
-    loading.classList.add(
-        'hidden'
-    );
-
-
-    console.log(
-        'PORPHYRA Cloth v11.4 loaded'
-    );
-
+    console.log('PORPHYRA Cloth v11.5 loaded');
 }
-catch (
-    error
-) {
+catch (error) {
+    console.error(error);
 
-    console.error(
-        error
-    );
-
-
-    loading.classList.add(
-        'hidden'
-    );
-
-
-    errorBox.style.display =
-        'block';
-
-
-    errorBox.textContent =
-        error.message;
-
+    loading.classList.add('hidden');
+    errorBox.style.display = 'block';
+    errorBox.textContent = error.message;
 }
 
 
@@ -5432,89 +1587,30 @@ catch (
 // ANIMATION
 // ==========================================================
 
-const clock =
-    new THREE.Clock();
+const clock = new THREE.Clock();
 
+renderer.setAnimationLoop(() => {
+    const frameTime = Math.min(clock.getDelta(), 0.05);
+    physicsAccumulator += frameTime;
 
-renderer.setAnimationLoop(
+    let substeps = 0;
 
-    () => {
-
-        const frameTime =
-
-            Math.min(
-
-                clock.getDelta(),
-
-                0.05
-
-            );
-
-
-        physicsAccumulator +=
-            frameTime;
-
-
-        let substeps =
-            0;
-
-
-        while (
-
-            physicsAccumulator >=
-                FIXED_TIMESTEP
-
-            &&
-
-            substeps <
-                MAX_SUBSTEPS
-
-        ) {
-
-            simulateCloth(
-                FIXED_TIMESTEP
-            );
-
-
-            physicsAccumulator -=
-                FIXED_TIMESTEP;
-
-
-            substeps++;
-
-        }
-
-
-        if (
-
-            substeps ===
-            MAX_SUBSTEPS
-
-        ) {
-
-            physicsAccumulator =
-                0;
-
-        }
-
-
-        if (
-            rug
-        ) {
-
-            updateGeometry();
-
-        }
-
-
-        renderer.render(
-
-            scene,
-
-            camera
-
-        );
-
+    while (
+        physicsAccumulator >= FIXED_TIMESTEP &&
+        substeps < MAX_SUBSTEPS
+    ) {
+        simulateCloth(FIXED_TIMESTEP);
+        physicsAccumulator -= FIXED_TIMESTEP;
+        substeps++;
     }
 
-);
+    if (substeps === MAX_SUBSTEPS) {
+        physicsAccumulator = 0;
+    }
+
+    if (rug) {
+        updateGeometry();
+    }
+
+    renderer.render(scene, camera);
+});
