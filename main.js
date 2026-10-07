@@ -1642,46 +1642,369 @@ function updateGeometry() {
 
 
 // ==========================================================
-// CREATE RUG — V8.2 RGB CHANNEL DIAGNOSTIC
+// V8.3 SAFE MASK DIAGNOSTIC
 // ==========================================================
 //
-// LEFT THIRD:
-// RED channel
+// This avoids custom GLSL entirely.
 //
-// CENTER THIRD:
-// GREEN channel
+// It loads rug_mask.png into a normal HTML canvas,
+// then creates a new image:
 //
-// RIGHT THIRD:
-// BLUE channel
+// LEFT THIRD   = RED channel
+// CENTER THIRD = GREEN channel
+// RIGHT THIRD  = BLUE channel
 //
-// Each channel is displayed as grayscale.
+// Each channel becomes grayscale.
 //
-// This completely bypasses:
-// - lighting
-// - ACES tone mapping
-// - roughness
-// - metallic
-// - normal mapping
-// - environment reflections
-//
+// This is then used as a normal Three.js texture.
+// ==========================================================
+
+async function createMaskDiagnosticTexture() {
+
+    return new Promise(
+        (resolve, reject) => {
+
+            const image =
+                new Image();
+
+
+            image.onload =
+                () => {
+
+                    try {
+
+                        // ----------------------------------
+                        // SOURCE CANVAS
+                        // ----------------------------------
+
+                        const sourceCanvas =
+                            document.createElement(
+                                'canvas'
+                            );
+
+
+                        sourceCanvas.width =
+                            image.width;
+
+
+                        sourceCanvas.height =
+                            image.height;
+
+
+                        const sourceContext =
+                            sourceCanvas.getContext(
+                                '2d',
+                                {
+                                    willReadFrequently:
+                                        true
+                                }
+                            );
+
+
+                        sourceContext.drawImage(
+                            image,
+                            0,
+                            0
+                        );
+
+
+                        const sourceImage =
+                            sourceContext.getImageData(
+                                0,
+                                0,
+                                image.width,
+                                image.height
+                            );
+
+
+                        const sourcePixels =
+                            sourceImage.data;
+
+
+                        // ----------------------------------
+                        // OUTPUT CANVAS
+                        //
+                        // Three complete copies side by side:
+                        //
+                        // R | G | B
+                        // ----------------------------------
+
+                        const outputCanvas =
+                            document.createElement(
+                                'canvas'
+                            );
+
+
+                        outputCanvas.width =
+                            image.width * 3;
+
+
+                        outputCanvas.height =
+                            image.height;
+
+
+                        const outputContext =
+                            outputCanvas.getContext(
+                                '2d'
+                            );
+
+
+                        const outputImage =
+                            outputContext.createImageData(
+                                outputCanvas.width,
+                                outputCanvas.height
+                            );
+
+
+                        const outputPixels =
+                            outputImage.data;
+
+
+                        // ----------------------------------
+                        // BUILD EACH CHANNEL
+                        // ----------------------------------
+
+                        for (
+                            let y = 0;
+                            y < image.height;
+                            y++
+                        ) {
+
+                            for (
+                                let x = 0;
+                                x < image.width;
+                                x++
+                            ) {
+
+                                const sourceIndex =
+                                    (
+                                        y *
+                                        image.width +
+                                        x
+                                    ) * 4;
+
+
+                                const red =
+                                    sourcePixels[
+                                        sourceIndex
+                                    ];
+
+
+                                const green =
+                                    sourcePixels[
+                                        sourceIndex + 1
+                                    ];
+
+
+                                const blue =
+                                    sourcePixels[
+                                        sourceIndex + 2
+                                    ];
+
+
+                                // --------------------------
+                                // RED PANEL
+                                // --------------------------
+
+                                let outputX =
+                                    x;
+
+
+                                let outputIndex =
+                                    (
+                                        y *
+                                        outputCanvas.width +
+                                        outputX
+                                    ) * 4;
+
+
+                                outputPixels[
+                                    outputIndex
+                                ] = red;
+
+
+                                outputPixels[
+                                    outputIndex + 1
+                                ] = red;
+
+
+                                outputPixels[
+                                    outputIndex + 2
+                                ] = red;
+
+
+                                outputPixels[
+                                    outputIndex + 3
+                                ] = 255;
+
+
+                                // --------------------------
+                                // GREEN PANEL
+                                // --------------------------
+
+                                outputX =
+                                    x +
+                                    image.width;
+
+
+                                outputIndex =
+                                    (
+                                        y *
+                                        outputCanvas.width +
+                                        outputX
+                                    ) * 4;
+
+
+                                outputPixels[
+                                    outputIndex
+                                ] = green;
+
+
+                                outputPixels[
+                                    outputIndex + 1
+                                ] = green;
+
+
+                                outputPixels[
+                                    outputIndex + 2
+                                ] = green;
+
+
+                                outputPixels[
+                                    outputIndex + 3
+                                ] = 255;
+
+
+                                // --------------------------
+                                // BLUE PANEL
+                                // --------------------------
+
+                                outputX =
+                                    x +
+                                    image.width * 2;
+
+
+                                outputIndex =
+                                    (
+                                        y *
+                                        outputCanvas.width +
+                                        outputX
+                                    ) * 4;
+
+
+                                outputPixels[
+                                    outputIndex
+                                ] = blue;
+
+
+                                outputPixels[
+                                    outputIndex + 1
+                                ] = blue;
+
+
+                                outputPixels[
+                                    outputIndex + 2
+                                ] = blue;
+
+
+                                outputPixels[
+                                    outputIndex + 3
+                                ] = 255;
+
+                            }
+
+                        }
+
+
+                        outputContext.putImageData(
+                            outputImage,
+                            0,
+                            0
+                        );
+
+
+                        // ----------------------------------
+                        // THREE.JS TEXTURE
+                        // ----------------------------------
+
+                        const diagnosticTexture =
+                            new THREE.CanvasTexture(
+                                outputCanvas
+                            );
+
+
+                        diagnosticTexture.colorSpace =
+                            THREE.SRGBColorSpace;
+
+
+                        diagnosticTexture.wrapS =
+                            THREE.ClampToEdgeWrapping;
+
+
+                        diagnosticTexture.wrapT =
+                            THREE.ClampToEdgeWrapping;
+
+
+                        diagnosticTexture.minFilter =
+                            THREE.LinearFilter;
+
+
+                        diagnosticTexture.magFilter =
+                            THREE.LinearFilter;
+
+
+                        diagnosticTexture.anisotropy =
+                            renderer.capabilities
+                                .getMaxAnisotropy();
+
+
+                        diagnosticTexture.needsUpdate =
+                            true;
+
+
+                        resolve(
+                            diagnosticTexture
+                        );
+
+                    }
+                    catch (error) {
+
+                        reject(error);
+
+                    }
+
+                };
+
+
+            image.onerror =
+                () => {
+
+                    reject(
+                        new Error(
+                            'Could not load ./textures/rug_mask.png'
+                        )
+                    );
+
+                };
+
+
+            image.src =
+                './textures/rug_mask.png';
+
+        }
+    );
+
+}
+
+
+// ==========================================================
+// CREATE RUG — V8.3 SAFE RGB TEST
 // ==========================================================
 
 async function createRug() {
 
-    const maskTexture =
-        await loadTexture(
-            './textures/rug_mask.png'
-        );
-
-
-    // Packed mask = mathematical data.
-    maskTexture.colorSpace =
-        THREE.NoColorSpace;
-
-
-    configureTexture(
-        maskTexture
-    );
+    const diagnosticTexture =
+        await createMaskDiagnosticTexture();
 
 
     // ------------------------------------------------------
@@ -1698,151 +2021,69 @@ async function createRug() {
 
 
     // ------------------------------------------------------
-    // RAW RGB CHANNEL SHADER
+    // MATERIAL
+    //
+    // Ordinary Three.js material.
+    // No custom shader.
+    // No lighting.
+    // No roughness.
+    // No metallic.
     // ------------------------------------------------------
 
     const material =
-        new THREE.ShaderMaterial({
+        new THREE.MeshBasicMaterial({
 
-            uniforms: {
-
-                maskMap: {
-                    value: maskTexture
-                },
-
-
-                textureRepeat: {
-                    value:
-                        new THREE.Vector2(
-                            REPEAT_X,
-                            REPEAT_Y
-                        )
-                }
-
-            },
-
-
-            vertexShader: `
-
-                varying vec2 vUv;
-
-                void main() {
-
-                    vUv = uv;
-
-                    gl_Position =
-                        projectionMatrix *
-                        modelViewMatrix *
-                        vec4(
-                            position,
-                            1.0
-                        );
-
-                }
-
-            `,
-
-
-            fragmentShader: `
-
-                uniform sampler2D maskMap;
-
-                uniform vec2 textureRepeat;
-
-                varying vec2 vUv;
-
-
-                void main() {
-
-                    // --------------------------------------
-                    // Preserve the same texture tiling used
-                    // by the regular rug material.
-                    // --------------------------------------
-
-                    vec2 sampleUv =
-                        vUv *
-                        textureRepeat;
-
-
-                    vec4 mask =
-                        texture2D(
-                            maskMap,
-                            sampleUv
-                        );
-
-
-                    float value;
-
-
-                    // --------------------------------------
-                    // LEFT THIRD = RED
-                    // --------------------------------------
-
-                    if (
-                        vUv.x <
-                        0.333333
-                    ) {
-
-                        value =
-                            mask.r;
-
-                    }
-
-
-                    // --------------------------------------
-                    // CENTER THIRD = GREEN
-                    // --------------------------------------
-
-                    else if (
-                        vUv.x <
-                        0.666666
-                    ) {
-
-                        value =
-                            mask.g;
-
-                    }
-
-
-                    // --------------------------------------
-                    // RIGHT THIRD = BLUE
-                    // --------------------------------------
-
-                    else {
-
-                        value =
-                            mask.b;
-
-                    }
-
-
-                    // --------------------------------------
-                    // RAW GRAYSCALE OUTPUT
-                    // --------------------------------------
-
-                    gl_FragColor =
-                        vec4(
-                            value,
-                            value,
-                            value,
-                            1.0
-                        );
-
-                }
-
-            `,
+            map:
+                diagnosticTexture,
 
 
             side:
                 THREE.DoubleSide,
 
 
-            // CRITICAL:
-            // Do not run diagnostic through ACES.
             toneMapped:
                 false
 
         });
+
+
+    // ------------------------------------------------------
+    // CREATE RUG
+    // ------------------------------------------------------
+
+    rug =
+        new THREE.Mesh(
+            geometry,
+            material
+        );
+
+
+    scene.add(
+        rug
+    );
+
+
+    // Keep every bit of your existing cloth physics.
+    initializeClothPhysics();
+
+
+    window.rug =
+        rug;
+
+
+    window.rugMaterial =
+        material;
+
+
+    window.maskDiagnostic =
+        diagnosticTexture;
+
+
+    console.log(
+        'PORPHYRA v8.3 — SAFE RGB MASK DIAGNOSTIC'
+    );
+
+}
 
 
     // ------------------------------------------------------
