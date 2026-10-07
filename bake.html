@@ -1,0 +1,1454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>PORPHYRA Texture Baker</title>
+
+    <style>
+        html,
+        body {
+            margin: 0;
+            min-height: 100%;
+            background: #090909;
+            color: #f0e7d8;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+            box-sizing: border-box;
+        }
+
+        .panel {
+            width: min(700px, 100%);
+            background: #151515;
+            border: 1px solid #3b2b32;
+            border-radius: 14px;
+            padding: 30px;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 24px;
+        }
+
+        p {
+            line-height: 1.6;
+            color: #cfc4b5;
+        }
+
+        #status {
+            margin: 24px 0;
+            padding: 14px;
+            background: #0e0e0e;
+            border-radius: 8px;
+            white-space: pre-wrap;
+        }
+
+        .downloads {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        a {
+            display: none;
+            text-decoration: none;
+            padding: 12px 18px;
+            border-radius: 8px;
+            background: #4b253d;
+            color: white;
+            font-weight: 700;
+        }
+
+        a.ready {
+            display: inline-block;
+        }
+
+        canvas {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="panel">
+
+    <h1>PORPHYRA v14 Texture Baker</h1>
+
+    <p>
+        This recreates the exact purple-and-gold material from
+        v13.2 once, then saves it as production-ready textures.
+    </p>
+
+    <div id="status">
+        Preparing...
+    </div>
+
+    <div class="downloads">
+
+        <a
+            id="colorDownload"
+            download="porphyra_color.png"
+        >
+            Download porphyra_color.png
+        </a>
+
+        <a
+            id="materialDownload"
+            download="porphyra_material.png"
+        >
+            Download porphyra_material.png
+        </a>
+
+    </div>
+
+</div>
+
+<script type="module">
+
+// ==========================================================
+// PORPHYRA — ONE-TIME MATERIAL BAKER
+//
+// Recreates the exact v13.2 runtime-generated maps.
+//
+// OUTPUT:
+//
+// porphyra_color.png
+//
+// porphyra_material.png
+//     R = unused
+//     G = roughness
+//     B = metalness
+//
+// ==========================================================
+
+
+// ==========================================================
+// SOURCE FILES
+// ==========================================================
+
+const BASE_PATH =
+    './textures/rug_basecolor.png';
+
+
+const MASK_PATH =
+    './textures/rug_mask.png';
+
+
+// ==========================================================
+// EXACT v13.2 COLOR SETTINGS
+// ==========================================================
+
+const FABRIC_HEX =
+    0x24102f;
+
+
+const PATTERN_HEX =
+    0xb88a3b;
+
+
+const PATTERN_MASK_DARK =
+    0.32;
+
+
+const PATTERN_MASK_LIGHT =
+    0.78;
+
+
+const RECOLOR_DETAIL_STRENGTH =
+    0.58;
+
+
+const RECOLOR_BRIGHTNESS =
+    1.10;
+
+
+const DETAIL_FACTOR_MIN =
+    0.62;
+
+
+const DETAIL_FACTOR_MAX =
+    1.42;
+
+
+const COLOR_MASK_STRENGTH =
+    0.42;
+
+
+// ==========================================================
+// MATERIAL SETTINGS
+// ==========================================================
+
+const MAX_METALNESS =
+    0.14;
+
+
+const MIN_SILK_ROUGHNESS =
+    0.40;
+
+
+const MAX_SILK_ROUGHNESS =
+    0.72;
+
+
+// ==========================================================
+// UI
+// ==========================================================
+
+const statusBox =
+    document.getElementById(
+        'status'
+    );
+
+
+const colorDownload =
+    document.getElementById(
+        'colorDownload'
+    );
+
+
+const materialDownload =
+    document.getElementById(
+        'materialDownload'
+    );
+
+
+// ==========================================================
+// HELPERS
+// ==========================================================
+
+function setStatus(
+    message
+) {
+
+    statusBox.textContent =
+        message;
+
+}
+
+
+function clamp01(
+    value
+) {
+
+    return Math.max(
+        0,
+        Math.min(
+            1,
+            value
+        )
+    );
+
+}
+
+
+function srgbToLinear(
+    value
+) {
+
+    if (
+        value <= 0.04045
+    ) {
+
+        return (
+            value /
+            12.92
+        );
+
+    }
+
+
+    return Math.pow(
+
+        (
+            value +
+            0.055
+        )
+
+        /
+
+        1.055,
+
+        2.4
+
+    );
+
+}
+
+
+function srgbByteToLinear(
+    byteValue
+) {
+
+    return srgbToLinear(
+        byteValue /
+        255
+    );
+
+}
+
+
+function linearToSrgbByte(
+    value
+) {
+
+    value =
+        clamp01(
+            value
+        );
+
+
+    const srgb =
+
+        value <=
+        0.0031308
+
+            ?
+
+            value *
+            12.92
+
+            :
+
+            1.055 *
+            Math.pow(
+                value,
+                1 / 2.4
+            )
+
+            -
+
+            0.055;
+
+
+    return Math.round(
+
+        clamp01(
+            srgb
+        )
+
+        *
+
+        255
+
+    );
+
+}
+
+
+function hexToLinearRgb(
+    hex
+) {
+
+    const r =
+
+        (
+            (
+                hex >>
+                16
+            )
+
+            &
+
+            255
+        )
+
+        /
+
+        255;
+
+
+    const g =
+
+        (
+            (
+                hex >>
+                8
+            )
+
+            &
+
+            255
+        )
+
+        /
+
+        255;
+
+
+    const b =
+
+        (
+            hex
+            &
+            255
+        )
+
+        /
+
+        255;
+
+
+    return {
+
+        r:
+            srgbToLinear(
+                r
+            ),
+
+        g:
+            srgbToLinear(
+                g
+            ),
+
+        b:
+            srgbToLinear(
+                b
+            )
+
+    };
+
+}
+
+
+function smoothstepRange(
+    value,
+    low,
+    high
+) {
+
+    let t =
+
+        (
+            value -
+            low
+        )
+
+        /
+
+        (
+            high -
+            low
+        );
+
+
+    t =
+        clamp01(
+            t
+        );
+
+
+    return (
+
+        t *
+        t *
+        (
+            3 -
+            2 * t
+        )
+
+    );
+
+}
+
+
+function getPatternMask(
+    maskR
+) {
+
+    return (
+
+        1
+
+        -
+
+        smoothstepRange(
+
+            maskR,
+
+            PATTERN_MASK_DARK,
+
+            PATTERN_MASK_LIGHT
+
+        )
+
+    );
+
+}
+
+
+function linearLuminance(
+    r,
+    g,
+    b
+) {
+
+    return (
+
+        r *
+        0.2126
+
+        +
+
+        g *
+        0.7152
+
+        +
+
+        b *
+        0.0722
+
+    );
+
+}
+
+
+function linearRamp(
+    value,
+    blackPosition,
+    whitePosition
+) {
+
+    return clamp01(
+
+        (
+            value -
+            blackPosition
+        )
+
+        /
+
+        (
+            whitePosition -
+            blackPosition
+        )
+
+    );
+
+}
+
+
+function loadImage(
+    path
+) {
+
+    return new Promise(
+        (
+            resolve,
+            reject
+        ) => {
+
+            const image =
+                new Image();
+
+
+            image.onload =
+                () =>
+                    resolve(
+                        image
+                    );
+
+
+            image.onerror =
+                () =>
+                    reject(
+
+                        new Error(
+                            `Could not load ${path}`
+                        )
+
+                    );
+
+
+            image.src =
+                path;
+
+        }
+    );
+
+}
+
+
+function canvasToBlob(
+    canvas
+) {
+
+    return new Promise(
+        (
+            resolve,
+            reject
+        ) => {
+
+            canvas.toBlob(
+
+                blob => {
+
+                    if (
+                        blob
+                    ) {
+
+                        resolve(
+                            blob
+                        );
+
+                    }
+                    else {
+
+                        reject(
+
+                            new Error(
+                                'Canvas export failed.'
+                            )
+
+                        );
+
+                    }
+
+                },
+
+                'image/png'
+
+            );
+
+        }
+    );
+
+}
+
+
+// ==========================================================
+// BAKE
+// ==========================================================
+
+async function bake() {
+
+    try {
+
+        setStatus(
+            'Loading rug_basecolor.png and rug_mask.png...'
+        );
+
+
+        const [
+            baseImage,
+            maskImage
+        ] =
+            await Promise.all([
+
+                loadImage(
+                    BASE_PATH
+                ),
+
+                loadImage(
+                    MASK_PATH
+                )
+
+            ]);
+
+
+        const width =
+
+            baseImage.naturalWidth ||
+            baseImage.width;
+
+
+        const height =
+
+            baseImage.naturalHeight ||
+            baseImage.height;
+
+
+        if (
+            !width ||
+            !height
+        ) {
+
+            throw new Error(
+                'Base texture has invalid dimensions.'
+            );
+
+        }
+
+
+        setStatus(
+            `Loaded ${width} × ${height} textures.\nAnalyzing original woven brightness...`
+        );
+
+
+        // ==================================================
+        // SOURCE BASE CANVAS
+        // ==================================================
+
+        const baseCanvas =
+            document.createElement(
+                'canvas'
+            );
+
+
+        baseCanvas.width =
+            width;
+
+
+        baseCanvas.height =
+            height;
+
+
+        const baseContext =
+            baseCanvas.getContext(
+
+                '2d',
+
+                {
+                    willReadFrequently:
+                        true
+                }
+
+            );
+
+
+        baseContext.drawImage(
+
+            baseImage,
+
+            0,
+            0,
+
+            width,
+            height
+
+        );
+
+
+        const baseData =
+            baseContext.getImageData(
+
+                0,
+                0,
+
+                width,
+                height
+
+            );
+
+
+        // ==================================================
+        // SOURCE MASK CANVAS
+        // ==================================================
+
+        const maskCanvas =
+            document.createElement(
+                'canvas'
+            );
+
+
+        maskCanvas.width =
+            width;
+
+
+        maskCanvas.height =
+            height;
+
+
+        const maskContext =
+            maskCanvas.getContext(
+
+                '2d',
+
+                {
+                    willReadFrequently:
+                        true
+                }
+
+            );
+
+
+        maskContext.drawImage(
+
+            maskImage,
+
+            0,
+            0,
+
+            width,
+            height
+
+        );
+
+
+        const maskData =
+            maskContext.getImageData(
+
+                0,
+                0,
+
+                width,
+                height
+
+            );
+
+
+        const basePixels =
+            baseData.data;
+
+
+        const maskPixels =
+            maskData.data;
+
+
+        // ==================================================
+        // FIRST PASS — MEASURE REGION LUMINANCE
+        // ==================================================
+
+        let fabricLuminanceSum =
+            0;
+
+
+        let fabricWeightSum =
+            0;
+
+
+        let patternLuminanceSum =
+            0;
+
+
+        let patternWeightSum =
+            0;
+
+
+        for (
+            let i = 0;
+            i < basePixels.length;
+            i += 4
+        ) {
+
+            const r =
+                srgbByteToLinear(
+                    basePixels[i]
+                );
+
+
+            const g =
+                srgbByteToLinear(
+                    basePixels[
+                        i + 1
+                    ]
+                );
+
+
+            const b =
+                srgbByteToLinear(
+                    basePixels[
+                        i + 2
+                    ]
+                );
+
+
+            const luminance =
+                linearLuminance(
+                    r,
+                    g,
+                    b
+                );
+
+
+            const maskR =
+                maskPixels[i] /
+                255;
+
+
+            const patternMask =
+                getPatternMask(
+                    maskR
+                );
+
+
+            const fabricWeight =
+                1 -
+                patternMask;
+
+
+            fabricLuminanceSum +=
+
+                luminance *
+                fabricWeight;
+
+
+            fabricWeightSum +=
+                fabricWeight;
+
+
+            patternLuminanceSum +=
+
+                luminance *
+                patternMask;
+
+
+            patternWeightSum +=
+                patternMask;
+
+        }
+
+
+        const averageFabricLuminance =
+
+            fabricLuminanceSum
+
+            /
+
+            Math.max(
+                fabricWeightSum,
+                0.0001
+            );
+
+
+        const averagePatternLuminance =
+
+            patternLuminanceSum
+
+            /
+
+            Math.max(
+                patternWeightSum,
+                0.0001
+            );
+
+
+        // ==================================================
+        // TARGET COLORS
+        // ==================================================
+
+        const fabricColor =
+            hexToLinearRgb(
+                FABRIC_HEX
+            );
+
+
+        const patternColor =
+            hexToLinearRgb(
+                PATTERN_HEX
+            );
+
+
+        // ==================================================
+        // OUTPUT CANVASES
+        // ==================================================
+
+        const colorCanvas =
+            document.createElement(
+                'canvas'
+            );
+
+
+        const materialCanvas =
+            document.createElement(
+                'canvas'
+            );
+
+
+        colorCanvas.width =
+            width;
+
+
+        colorCanvas.height =
+            height;
+
+
+        materialCanvas.width =
+            width;
+
+
+        materialCanvas.height =
+            height;
+
+
+        const colorContext =
+            colorCanvas.getContext(
+                '2d'
+            );
+
+
+        const materialContext =
+            materialCanvas.getContext(
+                '2d'
+            );
+
+
+        const colorOutput =
+            colorContext.createImageData(
+                width,
+                height
+            );
+
+
+        const materialOutput =
+            materialContext.createImageData(
+                width,
+                height
+            );
+
+
+        const colorPixels =
+            colorOutput.data;
+
+
+        const materialPixels =
+            materialOutput.data;
+
+
+        setStatus(
+            'Creating final imperial-purple / antique-gold material...'
+        );
+
+
+        // ==================================================
+        // SECOND PASS — FINAL MAPS
+        // ==================================================
+
+        for (
+            let i = 0;
+            i < basePixels.length;
+            i += 4
+        ) {
+
+            const maskR =
+                maskPixels[i] /
+                255;
+
+
+            const maskG =
+                maskPixels[
+                    i + 1
+                ] /
+                255;
+
+
+            const maskB =
+                maskPixels[
+                    i + 2
+                ] /
+                255;
+
+
+            const patternMask =
+                getPatternMask(
+                    maskR
+                );
+
+
+            // ----------------------------------------------
+            // SOURCE LUMINANCE
+            // ----------------------------------------------
+
+            const sourceR =
+                srgbByteToLinear(
+                    basePixels[i]
+                );
+
+
+            const sourceG =
+                srgbByteToLinear(
+                    basePixels[
+                        i + 1
+                    ]
+                );
+
+
+            const sourceB =
+                srgbByteToLinear(
+                    basePixels[
+                        i + 2
+                    ]
+                );
+
+
+            const sourceLuma =
+                linearLuminance(
+
+                    sourceR,
+
+                    sourceG,
+
+                    sourceB
+
+                );
+
+
+            const referenceLuminance =
+
+                averageFabricLuminance
+
+                +
+
+                (
+                    averagePatternLuminance -
+                    averageFabricLuminance
+                )
+
+                *
+
+                patternMask;
+
+
+            let detailFactor =
+
+                sourceLuma
+
+                /
+
+                Math.max(
+                    referenceLuminance,
+                    0.001
+                );
+
+
+            detailFactor =
+
+                Math.max(
+
+                    DETAIL_FACTOR_MIN,
+
+                    Math.min(
+
+                        DETAIL_FACTOR_MAX,
+
+                        detailFactor
+
+                    )
+
+                );
+
+
+            detailFactor =
+
+                Math.pow(
+
+                    detailFactor,
+
+                    RECOLOR_DETAIL_STRENGTH
+
+                );
+
+
+            const greenModulation =
+
+                1
+
+                +
+
+                (
+                    maskG -
+                    1
+                )
+
+                *
+
+                COLOR_MASK_STRENGTH;
+
+
+            // ----------------------------------------------
+            // PURPLE / GOLD COLOR
+            // ----------------------------------------------
+
+            let r =
+
+                fabricColor.r
+
+                +
+
+                (
+                    patternColor.r -
+                    fabricColor.r
+                )
+
+                *
+
+                patternMask;
+
+
+            let g =
+
+                fabricColor.g
+
+                +
+
+                (
+                    patternColor.g -
+                    fabricColor.g
+                )
+
+                *
+
+                patternMask;
+
+
+            let b =
+
+                fabricColor.b
+
+                +
+
+                (
+                    patternColor.b -
+                    fabricColor.b
+                )
+
+                *
+
+                patternMask;
+
+
+            const finalDetail =
+
+                detailFactor
+
+                *
+
+                greenModulation
+
+                *
+
+                RECOLOR_BRIGHTNESS;
+
+
+            r *=
+                finalDetail;
+
+
+            g *=
+                finalDetail;
+
+
+            b *=
+                finalDetail;
+
+
+            colorPixels[i] =
+                linearToSrgbByte(
+                    r
+                );
+
+
+            colorPixels[
+                i + 1
+            ] =
+                linearToSrgbByte(
+                    g
+                );
+
+
+            colorPixels[
+                i + 2
+            ] =
+                linearToSrgbByte(
+                    b
+                );
+
+
+            colorPixels[
+                i + 3
+            ] =
+                255;
+
+
+            // ----------------------------------------------
+            // METALNESS
+            // ----------------------------------------------
+
+            const metalness =
+
+                patternMask
+
+                *
+
+                MAX_METALNESS;
+
+
+            const metalByte =
+
+                Math.round(
+
+                    metalness *
+                    255
+
+                );
+
+
+            // ----------------------------------------------
+            // ROUGHNESS
+            // ----------------------------------------------
+
+            const blenderRoughness =
+
+                linearRamp(
+
+                    maskB,
+
+                    0.051,
+
+                    0.763
+
+                );
+
+
+            const roughness =
+
+                MIN_SILK_ROUGHNESS
+
+                +
+
+                (
+                    MAX_SILK_ROUGHNESS -
+                    MIN_SILK_ROUGHNESS
+                )
+
+                *
+
+                blenderRoughness;
+
+
+            const roughByte =
+
+                Math.round(
+
+                    roughness *
+                    255
+
+                );
+
+
+            // ----------------------------------------------
+            // PACKED THREE.JS MATERIAL MAP
+            //
+            // R = unused
+            // G = roughness
+            // B = metalness
+            // ----------------------------------------------
+
+            materialPixels[i] =
+                255;
+
+
+            materialPixels[
+                i + 1
+            ] =
+                roughByte;
+
+
+            materialPixels[
+                i + 2
+            ] =
+                metalByte;
+
+
+            materialPixels[
+                i + 3
+            ] =
+                255;
+
+        }
+
+
+        colorContext.putImageData(
+
+            colorOutput,
+
+            0,
+            0
+
+        );
+
+
+        materialContext.putImageData(
+
+            materialOutput,
+
+            0,
+            0
+
+        );
+
+
+        setStatus(
+            'Encoding PNG files...'
+        );
+
+
+        const [
+            colorBlob,
+            materialBlob
+        ] =
+            await Promise.all([
+
+                canvasToBlob(
+                    colorCanvas
+                ),
+
+                canvasToBlob(
+                    materialCanvas
+                )
+
+            ]);
+
+
+        colorDownload.href =
+            URL.createObjectURL(
+                colorBlob
+            );
+
+
+        materialDownload.href =
+            URL.createObjectURL(
+                materialBlob
+            );
+
+
+        colorDownload.classList.add(
+            'ready'
+        );
+
+
+        materialDownload.classList.add(
+            'ready'
+        );
+
+
+        setStatus(
+            `Finished!\n\nDownload both files and put them inside your textures folder.\n\nporphyra_color.png\nporphyra_material.png`
+        );
+
+    }
+    catch (
+        error
+    ) {
+
+        console.error(
+            error
+        );
+
+
+        setStatus(
+            `ERROR:\n${error.message}`
+        );
+
+    }
+
+}
+
+
+bake();
+
+</script>
+
+</body>
+</html>
