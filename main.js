@@ -1712,86 +1712,43 @@ metalnessFactor =
 
 
 // ----------------------------------------------------------
-// CREATE RUG — V8.1 MASK DIAGNOSTIC
+// CREATE RUG — V8.2 RGB CHANNEL DIAGNOSTIC
 // ----------------------------------------------------------
 //
 // TEMPORARY TEST:
 //
-// This deliberately displays rug_mask.png directly as the
-// visible surface of the cloth.
+// LEFT THIRD   = RED channel
+// CENTER THIRD = GREEN channel
+// RIGHT THIRD  = BLUE channel
 //
-// Expected result:
+// Each channel is shown as pure grayscale:
 //
-// RED / PINK + BLUE / PURPLE mask colors.
+// black = channel value 0
+// white = channel value 1
 //
-// If you see those colors, we know:
-// 1. rug_mask.png is loading
-// 2. its UV tiling matches the rug
-// 3. Three.js can use the texture correctly
+// Lighting, tone mapping, normals, metallic, roughness,
+// and all other material effects are bypassed.
 //
-// After testing, we will REMOVE this diagnostic.
+// Cloth physics remain fully functional.
 // ----------------------------------------------------------
 
 async function createRug() {
 
-    const [
-        baseColor,
-        maskTexture,
-        normalMap
-    ] = await Promise.all([
-
-        loadTexture(
-            './textures/rug_basecolor.png'
-        ),
-
-        loadTexture(
+    const maskTexture =
+        await loadTexture(
             './textures/rug_mask.png'
-        ),
-
-        loadTexture(
-            './textures/rug_normal.png'
-        )
-
-    ]);
+        );
 
 
-    // ------------------------------------------------------
-    // COLOR SPACE
-    // ------------------------------------------------------
-
-    baseColor.colorSpace =
-        THREE.SRGBColorSpace;
-
-
-    // Normally this is DATA, not visible color.
+    // This is raw DATA.
     //
-    // But for this diagnostic we are intentionally displaying
-    // it directly, so using SRGB makes the RGB channels easier
-    // to inspect visually.
+    // Do NOT let Three.js treat it as an sRGB color image.
     maskTexture.colorSpace =
-        THREE.SRGBColorSpace;
-
-
-    normalMap.colorSpace =
         THREE.NoColorSpace;
-
-
-    // ------------------------------------------------------
-    // UV / TILING
-    // ------------------------------------------------------
-
-    configureTexture(
-        baseColor
-    );
 
 
     configureTexture(
         maskTexture
-    );
-
-
-    configureTexture(
-        normalMap
     );
 
 
@@ -1809,32 +1766,166 @@ async function createRug() {
 
 
     // ------------------------------------------------------
-    // DIAGNOSTIC MATERIAL
-    // ------------------------------------------------------
-    //
-    // MeshBasicMaterial intentionally ignores:
-    //
-    // lighting
-    // roughness
-    // metallic
-    // normal maps
-    // environment reflections
-    //
-    // So what you see is essentially the raw packed-mask
-    // image placed on the moving cloth.
+    // RAW CHANNEL SHADER
     // ------------------------------------------------------
 
     const material =
-        new THREE.MeshBasicMaterial({
+        new THREE.ShaderMaterial({
 
-            map:
-                maskTexture,
+            uniforms: {
+
+                maskMap: {
+                    value: maskTexture
+                }
+
+            },
+
+
+            vertexShader: `
+
+                varying vec2 vUv;
+
+                void main() {
+
+                    vUv = uv;
+
+                    gl_Position =
+                        projectionMatrix *
+                        modelViewMatrix *
+                        vec4(
+                            position,
+                            1.0
+                        );
+
+                }
+
+            `,
+
+
+            fragmentShader: `
+
+                uniform sampler2D maskMap;
+
+                varying vec2 vUv;
+
+
+                void main() {
+
+                    vec4 mask =
+                        texture2D(
+                            maskMap,
+                            vUv
+                        );
+
+
+                    float value;
+
+
+                    // --------------------------------------
+                    // LEFT THIRD = RED
+                    // --------------------------------------
+
+                    if (
+                        vUv.x <
+                        0.333333
+                    ) {
+
+                        value =
+                            mask.r;
+
+                    }
+
+
+                    // --------------------------------------
+                    // CENTER THIRD = GREEN
+                    // --------------------------------------
+
+                    else if (
+                        vUv.x <
+                        0.666666
+                    ) {
+
+                        value =
+                            mask.g;
+
+                    }
+
+
+                    // --------------------------------------
+                    // RIGHT THIRD = BLUE
+                    // --------------------------------------
+
+                    else {
+
+                        value =
+                            mask.b;
+
+                    }
+
+
+                    gl_FragColor =
+                        vec4(
+                            value,
+                            value,
+                            value,
+                            1.0
+                        );
+
+                }
+
+            `,
 
 
             side:
-                THREE.DoubleSide
+                THREE.DoubleSide,
+
+
+            // CRITICAL:
+            //
+            // Do not run this through ACESFilm.
+            toneMapped:
+                false
 
         });
+
+
+    // ------------------------------------------------------
+    // CREATE RUG
+    // ------------------------------------------------------
+
+    rug =
+        new THREE.Mesh(
+            geometry,
+            material
+        );
+
+
+    scene.add(
+        rug
+    );
+
+
+    // Keep all of v7's cloth movement.
+    initializeClothPhysics();
+
+
+    window.rug =
+        rug;
+
+
+    window.rugMaterial =
+        material;
+
+
+    window.rugMask =
+        maskTexture;
+
+
+    console.log(
+        'PORPHYRA v8.2 — RAW RGB CHANNEL TEST'
+    );
+
+}
 
 
     // ------------------------------------------------------
