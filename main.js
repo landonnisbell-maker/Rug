@@ -3,17 +3,16 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 
 // ==========================================================
-// PORPHYRA — INTERACTIVE CLOTH v11.3
+// PORPHYRA — INTERACTIVE CLOTH v11.4
 //
-// FRAYED EDGES
+// SIDE SELVAGE + REALISTIC FRAY
 //
-// Changes from previous version:
-// - removes the boxy woven edge band
-// - removes fake visible thickness shell
-// - keeps the main rug surface clean
-// - adds frayed/tassel fringe geometry
-// - fringe follows the cloth edge
-// - keeps cinematic lighting, silk shading, fold occlusion
+// Changes from v11.3:
+// - removes decorative tassels/fringe from all four sides
+// - adds a narrow woven selvage band ONLY on left/right sides
+// - adds many short, irregular broken fibers along those sides
+// - no boxy thickness, no backside mesh, no forced camera angle
+// - keeps cinematic lighting, silk shading, fold occlusion, physics
 // ==========================================================
 
 
@@ -32,27 +31,55 @@ const ROWS = SEGMENTS_Y + 1;
 
 
 // ==========================================================
-// FRAYED EDGE SETTINGS
+// SIDE SELVAGE / FRAY — v11.4
 // ==========================================================
 
-const FRINGE_COLOR = new THREE.Color(0xe8dbc7);
+// Narrow woven strip like the bound/selvage edge in your reference.
+const SIDE_BAND_COLOR =
+    new THREE.Color(
+        0x68463f
+    );
 
-const TOP_BOTTOM_FRINGE_COUNT = 90;
-const SIDE_FRINGE_COUNT = 44;
+const SIDE_BAND_WIDTH = 0.075;
 
-const FRINGE_MIN_LENGTH = 0.08;
-const FRINGE_MAX_LENGTH = 0.16;
+const SIDE_BAND_OVERLAP = 0.008;
 
-const FRINGE_MIN_WIDTH = 0.010;
-const FRINGE_MAX_WIDTH = 0.026;
+const SIDE_BAND_Z_SINK_INNER = 0.0015;
 
-const FRINGE_BASE_OUTSET = 0.008;
-const FRINGE_TIP_DROOP = 0.018;
-const FRINGE_BASE_SINK = 0.002;
-const FRINGE_TIP_SINK = 0.010;
+const SIDE_BAND_Z_SINK_OUTER = 0.0045;
 
-const FRINGE_SIDE_LENGTH_SCALE = 0.55;
-const FRINGE_SIDE_WIDTH_SCALE = 0.75;
+
+// Dense, short, irregular broken fibers outside the band.
+const SIDE_FRAY_COLOR =
+    new THREE.Color(
+        0xe3d8c7
+    );
+
+const SIDE_FRAY_STRANDS_PER_SIDE = 220;
+
+const SIDE_FRAY_MIN_LENGTH = 0.010;
+
+const SIDE_FRAY_MAX_LENGTH = 0.072;
+
+const SIDE_FRAY_MIN_WIDTH = 0.0025;
+
+const SIDE_FRAY_MAX_WIDTH = 0.0100;
+
+const SIDE_FRAY_BASE_OVERLAP = 0.004;
+
+const SIDE_FRAY_Y_JITTER = 0.024;
+
+const SIDE_FRAY_TIP_Y_SWAY = 0.035;
+
+const SIDE_FRAY_Z_JITTER = 0.008;
+
+const SIDE_FRAY_TIP_SINK = 0.006;
+
+
+// Some strands are intentionally tiny so the edge has broken gaps.
+const SIDE_FRAY_GAP_CHANCE = 0.14;
+
+const SIDE_FRAY_GAP_LENGTH_SCALE = 0.18;
 
 
 // ==========================================================
@@ -60,7 +87,13 @@ const FRINGE_SIDE_WIDTH_SCALE = 0.75;
 // ==========================================================
 
 const REPEAT_Y = 1.6;
-const REPEAT_X = REPEAT_Y * (RUG_WIDTH / RUG_HEIGHT);
+
+const REPEAT_X =
+    REPEAT_Y *
+    (
+        RUG_WIDTH /
+        RUG_HEIGHT
+    );
 
 
 // ==========================================================
@@ -68,14 +101,19 @@ const REPEAT_X = REPEAT_Y * (RUG_WIDTH / RUG_HEIGHT);
 // ==========================================================
 
 const COLOR_MASK_STRENGTH = 0.42;
+
 const MAX_METALNESS = 0.14;
+
 const MIN_SILK_ROUGHNESS = 0.40;
+
 const MAX_SILK_ROUGHNESS = 0.72;
 
 const SILK_ANISOTROPY = 0.68;
+
 const SILK_ANISOTROPY_ROTATION = 0.0;
 
 const SILK_SHEEN = 0.82;
+
 const SILK_SHEEN_ROUGHNESS = 0.48;
 
 const ENVIRONMENT_INTENSITY = 0.22;
@@ -86,8 +124,11 @@ const ENVIRONMENT_INTENSITY = 0.22;
 // ==========================================================
 
 const VALLEY_DARKEN_STRENGTH = 0.28;
+
 const CREST_LIGHTEN_STRENGTH = 0.02;
+
 const CURVATURE_START = 0.010;
+
 const CURVATURE_END = 0.060;
 
 
@@ -96,41 +137,57 @@ const CURVATURE_END = 0.060;
 // ==========================================================
 
 const TENSION = 0.26;
+
 const RESTORE_FORCE = 0.035;
+
 const DAMPING = 0.92;
 
 const POINTER_FOLLOW_SPEED = 38;
+
 const SPEED_SMOOTHING = 8;
+
 const DIRECTION_UPDATE_THRESHOLD = 0.28;
+
 const DIRECTION_FOLLOW_SPEED = 10;
 
 const SPEED_DEADZONE = 0.12;
+
 const SPEED_FULL_EFFECT = 5.0;
 
 const MIN_BULGE = 0.045;
+
 const MIN_RADIUS = 0.55;
+
 const MIN_POINTER_STIFFNESS = 0.070;
 
 const MAX_BULGE = 0.58;
+
 const MAX_RADIUS = 0.92;
+
 const MAX_POINTER_STIFFNESS = 0.17;
 
 const SLOW_POINTER_DAMPING = 0.55;
+
 const FAST_POINTER_DAMPING = 0.16;
 
 const MIN_FOLD_AMPLITUDE = 0.007;
+
 const MAX_FOLD_AMPLITUDE = 0.070;
 
 const MIN_FOLD_LENGTH = 0.80;
+
 const MAX_FOLD_LENGTH = 1.60;
 
 const MIN_FOLD_WIDTH = 0.42;
+
 const MAX_FOLD_WIDTH = 0.82;
 
 const FOLD_FREQUENCY_1 = 7.0;
+
 const FOLD_FREQUENCY_2 = 4.2;
 
 const MIN_DRAG_AMOUNT = 0.002;
+
 const MAX_DRAG_AMOUNT = 0.060;
 
 
@@ -138,64 +195,142 @@ const MAX_DRAG_AMOUNT = 0.060;
 // FIXED PHYSICS TIMESTEP
 // ==========================================================
 
-const FIXED_TIMESTEP = 1 / 120;
-const MAX_SUBSTEPS = 5;
-let physicsAccumulator = 0;
+const FIXED_TIMESTEP =
+    1 / 120;
+
+const MAX_SUBSTEPS =
+    5;
+
+let physicsAccumulator =
+    0;
 
 
 // ==========================================================
 // SCENE
 // ==========================================================
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000000);
+const scene =
+    new THREE.Scene();
+
+scene.background =
+    new THREE.Color(
+        0x000000
+    );
 
 
 // ==========================================================
 // CAMERA
 // ==========================================================
 
-const camera = new THREE.PerspectiveCamera(
-    32,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    100
-);
+const camera =
+    new THREE.PerspectiveCamera(
+
+        32,
+
+        window.innerWidth /
+        window.innerHeight,
+
+        0.1,
+
+        100
+
+    );
 
 
 // ==========================================================
 // RENDERER
 // ==========================================================
 
-const renderer = new THREE.WebGLRenderer({
-    antialias: true,
-    powerPreference: 'high-performance'
-});
+const renderer =
+    new THREE.WebGLRenderer({
 
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.76;
+        antialias:
+            true,
 
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.shadowMap.autoUpdate = true;
+        powerPreference:
+            'high-performance'
 
-document.body.appendChild(renderer.domElement);
+    });
+
+
+renderer.setPixelRatio(
+
+    Math.min(
+
+        window.devicePixelRatio,
+
+        2
+
+    )
+
+);
+
+
+renderer.setSize(
+
+    window.innerWidth,
+
+    window.innerHeight
+
+);
+
+
+renderer.outputColorSpace =
+    THREE.SRGBColorSpace;
+
+
+renderer.toneMapping =
+    THREE.ACESFilmicToneMapping;
+
+
+renderer.toneMappingExposure =
+    0.76;
+
+
+renderer.shadowMap.enabled =
+    true;
+
+
+renderer.shadowMap.type =
+    THREE.PCFSoftShadowMap;
+
+
+renderer.shadowMap.autoUpdate =
+    true;
+
+
+document.body.appendChild(
+    renderer.domElement
+);
 
 
 // ==========================================================
 // ENVIRONMENT
 // ==========================================================
 
-const pmrem = new THREE.PMREMGenerator(renderer);
-const room = new RoomEnvironment();
-const environment = pmrem.fromScene(room, 0.04);
+const pmrem =
+    new THREE.PMREMGenerator(
+        renderer
+    );
 
-scene.environment = environment.texture;
+
+const room =
+    new RoomEnvironment();
+
+
+const environment =
+    pmrem.fromScene(
+        room,
+        0.04
+    );
+
+
+scene.environment =
+    environment.texture;
+
 
 room.dispose();
+
 pmrem.dispose();
 
 
@@ -205,57 +340,273 @@ pmrem.dispose();
 
 RectAreaLightUniformsLib.init();
 
-const warmAreaKey = new THREE.RectAreaLight(0xffd7ad, 5.2, 6.5, 2.4);
-warmAreaKey.position.set(-3.8, 3.2, 4.2);
-warmAreaKey.lookAt(0, 0, 0);
-scene.add(warmAreaKey);
 
-const shadowKey = new THREE.SpotLight(0xffdfbd, 95, 20, Math.PI / 3.25, 0.72, 2);
-shadowKey.position.set(-4.8, 3.8, 5.0);
-shadowKey.target.position.set(0, 0, 0);
-scene.add(shadowKey.target);
+const warmAreaKey =
+    new THREE.RectAreaLight(
 
-shadowKey.castShadow = true;
-shadowKey.shadow.mapSize.width = 2048;
-shadowKey.shadow.mapSize.height = 2048;
-shadowKey.shadow.camera.near = 0.5;
-shadowKey.shadow.camera.far = 20;
-shadowKey.shadow.focus = 1;
-shadowKey.shadow.bias = -0.00015;
-shadowKey.shadow.normalBias = 0.018;
-shadowKey.shadow.radius = 3;
-scene.add(shadowKey);
+        0xffd7ad,
 
-const coolFill = new THREE.RectAreaLight(0xbecbff, 0.58, 4.5, 3.2);
-coolFill.position.set(4.0, -2.8, 3.3);
-coolFill.lookAt(0, 0, 0);
-scene.add(coolFill);
+        5.2,
 
-const rimLight = new THREE.RectAreaLight(0xffc98c, 0.72, 4.5, 0.7);
-rimLight.position.set(1.5, 4.5, 2.6);
-rimLight.lookAt(0, 0, 0);
-scene.add(rimLight);
+        6.5,
+
+        2.4
+
+    );
+
+
+warmAreaKey.position.set(
+
+    -3.8,
+
+    3.2,
+
+    4.2
+
+);
+
+
+warmAreaKey.lookAt(
+    0,
+    0,
+    0
+);
+
+
+scene.add(
+    warmAreaKey
+);
+
+
+// ----------------------------------------------------------
+// SHADOW KEY
+// ----------------------------------------------------------
+
+const shadowKey =
+    new THREE.SpotLight(
+
+        0xffdfbd,
+
+        95,
+
+        20,
+
+        Math.PI /
+        3.25,
+
+        0.72,
+
+        2
+
+    );
+
+
+shadowKey.position.set(
+
+    -4.8,
+
+    3.8,
+
+    5.0
+
+);
+
+
+shadowKey.target.position.set(
+    0,
+    0,
+    0
+);
+
+
+scene.add(
+    shadowKey.target
+);
+
+
+shadowKey.castShadow =
+    true;
+
+
+shadowKey.shadow.mapSize.width =
+    2048;
+
+
+shadowKey.shadow.mapSize.height =
+    2048;
+
+
+shadowKey.shadow.camera.near =
+    0.5;
+
+
+shadowKey.shadow.camera.far =
+    20;
+
+
+shadowKey.shadow.focus =
+    1;
+
+
+shadowKey.shadow.bias =
+    -0.00015;
+
+
+shadowKey.shadow.normalBias =
+    0.018;
+
+
+shadowKey.shadow.radius =
+    3;
+
+
+scene.add(
+    shadowKey
+);
+
+
+// ----------------------------------------------------------
+// COOL FILL
+// ----------------------------------------------------------
+
+const coolFill =
+    new THREE.RectAreaLight(
+
+        0xbecbff,
+
+        0.58,
+
+        4.5,
+
+        3.2
+
+    );
+
+
+coolFill.position.set(
+
+    4.0,
+
+    -2.8,
+
+    3.3
+
+);
+
+
+coolFill.lookAt(
+    0,
+    0,
+    0
+);
+
+
+scene.add(
+    coolFill
+);
+
+
+// ----------------------------------------------------------
+// WARM RIM
+// ----------------------------------------------------------
+
+const rimLight =
+    new THREE.RectAreaLight(
+
+        0xffc98c,
+
+        0.72,
+
+        4.5,
+
+        0.7
+
+    );
+
+
+rimLight.position.set(
+
+    1.5,
+
+    4.5,
+
+    2.6
+
+);
+
+
+rimLight.lookAt(
+    0,
+    0,
+    0
+);
+
+
+scene.add(
+    rimLight
+);
 
 
 // ==========================================================
 // TEXTURES
 // ==========================================================
 
-const textureLoader = new THREE.TextureLoader();
+const textureLoader =
+    new THREE.TextureLoader();
 
-async function loadTexture(path) {
-    return await textureLoader.loadAsync(path);
+
+async function loadTexture(
+    path
+) {
+
+    return await textureLoader.loadAsync(
+        path
+    );
+
 }
 
-function configureTexture(texture) {
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(REPEAT_X, REPEAT_Y);
-    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    texture.minFilter = THREE.LinearMipmapLinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    texture.generateMipmaps = true;
-    texture.needsUpdate = true;
+
+function configureTexture(
+    texture
+) {
+
+    texture.wrapS =
+        THREE.RepeatWrapping;
+
+
+    texture.wrapT =
+        THREE.RepeatWrapping;
+
+
+    texture.repeat.set(
+
+        REPEAT_X,
+
+        REPEAT_Y
+
+    );
+
+
+    texture.anisotropy =
+        renderer.capabilities
+            .getMaxAnisotropy();
+
+
+    texture.minFilter =
+        THREE.LinearMipmapLinearFilter;
+
+
+    texture.magFilter =
+        THREE.LinearFilter;
+
+
+    texture.generateMipmaps =
+        true;
+
+
+    texture.needsUpdate =
+        true;
+
 }
 
 
@@ -263,15 +614,52 @@ function configureTexture(texture) {
 // HTML IMAGE LOADING
 // ==========================================================
 
-function loadHtmlImage(path) {
-    return new Promise((resolve, reject) => {
-        const image = new Image();
+function loadHtmlImage(
+    path
+) {
 
-        image.onload = () => resolve(image);
-        image.onerror = () => reject(new Error(`Could not load ${path}`));
+    return new Promise(
 
-        image.src = path;
-    });
+        (
+            resolve,
+            reject
+        ) => {
+
+            const image =
+                new Image();
+
+
+            image.onload =
+                () => {
+
+                    resolve(
+                        image
+                    );
+
+                };
+
+
+            image.onerror =
+                () => {
+
+                    reject(
+
+                        new Error(
+                            `Could not load ${path}`
+                        )
+
+                    );
+
+                };
+
+
+            image.src =
+                path;
+
+        }
+
+    );
+
 }
 
 
@@ -279,24 +667,140 @@ function loadHtmlImage(path) {
 // COLOR HELPERS
 // ==========================================================
 
-function srgbByteToLinear(byteValue) {
-    const value = byteValue / 255;
-    if (value <= 0.04045) return value / 12.92;
-    return Math.pow((value + 0.055) / 1.055, 2.4);
+function srgbByteToLinear(
+    byteValue
+) {
+
+    const value =
+        byteValue /
+        255;
+
+
+    if (
+        value <=
+        0.04045
+    ) {
+
+        return (
+            value /
+            12.92
+        );
+
+    }
+
+
+    return Math.pow(
+
+        (
+            value +
+            0.055
+        )
+
+        /
+
+        1.055,
+
+        2.4
+
+    );
+
 }
 
-function linearToSrgbByte(value) {
-    value = Math.max(0, Math.min(1, value));
 
-    const srgb = value <= 0.0031308
-        ? value * 12.92
-        : 1.055 * Math.pow(value, 1 / 2.4) - 0.055;
+function linearToSrgbByte(
+    value
+) {
 
-    return Math.round(Math.max(0, Math.min(1, srgb)) * 255);
+    value =
+        Math.max(
+
+            0,
+
+            Math.min(
+                1,
+                value
+            )
+
+        );
+
+
+    const srgb =
+
+        value <=
+        0.0031308
+
+            ?
+
+            value *
+            12.92
+
+            :
+
+            1.055 *
+            Math.pow(
+                value,
+                1 / 2.4
+            )
+            -
+            0.055;
+
+
+    return Math.round(
+
+        Math.max(
+
+            0,
+
+            Math.min(
+                1,
+                srgb
+            )
+
+        )
+
+        *
+
+        255
+
+    );
+
 }
 
-function linearRamp(value, blackPosition, whitePosition) {
-    return Math.max(0, Math.min(1, (value - blackPosition) / (whitePosition - blackPosition)));
+
+function linearRamp(
+
+    value,
+
+    blackPosition,
+
+    whitePosition
+
+) {
+
+    return Math.max(
+
+        0,
+
+        Math.min(
+
+            1,
+
+            (
+                value -
+                blackPosition
+            )
+
+            /
+
+            (
+                whitePosition -
+                blackPosition
+            )
+
+        )
+
+    );
+
 }
 
 
@@ -305,122 +809,623 @@ function linearRamp(value, blackPosition, whitePosition) {
 // ==========================================================
 
 async function createV10SilkMaps() {
-    const [baseImage, maskImage] = await Promise.all([
-        loadHtmlImage('./textures/rug_basecolor.png'),
-        loadHtmlImage('./textures/rug_mask.png')
-    ]);
 
-    const width = baseImage.naturalWidth || baseImage.width;
-    const imageHeight = baseImage.naturalHeight || baseImage.height;
+    const [
+        baseImage,
+        maskImage
+    ] =
+        await Promise.all([
 
-    if (!width || !imageHeight) {
-        throw new Error('Base-color image has invalid dimensions.');
+            loadHtmlImage(
+                './textures/rug_basecolor.png'
+            ),
+
+            loadHtmlImage(
+                './textures/rug_mask.png'
+            )
+
+        ]);
+
+
+    const width =
+        baseImage.naturalWidth ||
+        baseImage.width;
+
+
+    const imageHeight =
+        baseImage.naturalHeight ||
+        baseImage.height;
+
+
+    if (
+        !width ||
+        !imageHeight
+    ) {
+
+        throw new Error(
+            'Base-color image has invalid dimensions.'
+        );
+
     }
 
-    const baseCanvas = document.createElement('canvas');
-    baseCanvas.width = width;
-    baseCanvas.height = imageHeight;
 
-    const baseContext = baseCanvas.getContext('2d', { willReadFrequently: true });
-    if (!baseContext) throw new Error('Could not create base canvas.');
+    // ------------------------------------------------------
+    // BASE COLOR
+    // ------------------------------------------------------
 
-    baseContext.drawImage(baseImage, 0, 0, width, imageHeight);
-    const baseData = baseContext.getImageData(0, 0, width, imageHeight);
+    const baseCanvas =
+        document.createElement(
+            'canvas'
+        );
 
-    const maskCanvas = document.createElement('canvas');
-    maskCanvas.width = width;
-    maskCanvas.height = imageHeight;
 
-    const maskContext = maskCanvas.getContext('2d', { willReadFrequently: true });
-    if (!maskContext) throw new Error('Could not create mask canvas.');
+    baseCanvas.width =
+        width;
 
-    maskContext.drawImage(maskImage, 0, 0, width, imageHeight);
-    const maskData = maskContext.getImageData(0, 0, width, imageHeight);
 
-    const colorCanvas = document.createElement('canvas');
-    const metalCanvas = document.createElement('canvas');
-    const roughCanvas = document.createElement('canvas');
+    baseCanvas.height =
+        imageHeight;
 
-    for (const canvas of [colorCanvas, metalCanvas, roughCanvas]) {
-        canvas.width = width;
-        canvas.height = imageHeight;
+
+    const baseContext =
+        baseCanvas.getContext(
+
+            '2d',
+
+            {
+                willReadFrequently:
+                    true
+            }
+
+        );
+
+
+    if (
+        !baseContext
+    ) {
+
+        throw new Error(
+            'Could not create base canvas.'
+        );
+
     }
 
-    const colorContext = colorCanvas.getContext('2d');
-    const metalContext = metalCanvas.getContext('2d');
-    const roughContext = roughCanvas.getContext('2d');
 
-    if (!colorContext || !metalContext || !roughContext) {
-        throw new Error('Could not create output canvases.');
+    baseContext.drawImage(
+
+        baseImage,
+
+        0,
+        0,
+
+        width,
+        imageHeight
+
+    );
+
+
+    const baseData =
+        baseContext.getImageData(
+
+            0,
+            0,
+
+            width,
+            imageHeight
+
+        );
+
+
+    // ------------------------------------------------------
+    // MASK
+    // ------------------------------------------------------
+
+    const maskCanvas =
+        document.createElement(
+            'canvas'
+        );
+
+
+    maskCanvas.width =
+        width;
+
+
+    maskCanvas.height =
+        imageHeight;
+
+
+    const maskContext =
+        maskCanvas.getContext(
+
+            '2d',
+
+            {
+                willReadFrequently:
+                    true
+            }
+
+        );
+
+
+    if (
+        !maskContext
+    ) {
+
+        throw new Error(
+            'Could not create mask canvas.'
+        );
+
     }
 
-    const colorOutput = colorContext.createImageData(width, imageHeight);
-    const metalOutput = metalContext.createImageData(width, imageHeight);
-    const roughOutput = roughContext.createImageData(width, imageHeight);
 
-    const basePixels = baseData.data;
-    const maskPixels = maskData.data;
-    const colorPixels = colorOutput.data;
-    const metalPixels = metalOutput.data;
-    const roughPixels = roughOutput.data;
+    maskContext.drawImage(
 
-    for (let i = 0; i < basePixels.length; i += 4) {
-        const maskR = maskPixels[i] / 255;
-        const maskG = maskPixels[i + 1] / 255;
-        const maskB = maskPixels[i + 2] / 255;
+        maskImage,
 
-        const greenModulation = 1.0 + (maskG - 1.0) * COLOR_MASK_STRENGTH;
+        0,
+        0,
 
-        let r = srgbByteToLinear(basePixels[i]);
-        let g = srgbByteToLinear(basePixels[i + 1]);
-        let b = srgbByteToLinear(basePixels[i + 2]);
+        width,
+        imageHeight
 
-        r *= 1.3 * greenModulation;
-        g *= 1.3 * greenModulation;
-        b *= 1.3 * greenModulation;
+    );
 
-        colorPixels[i] = linearToSrgbByte(r);
-        colorPixels[i + 1] = linearToSrgbByte(g);
-        colorPixels[i + 2] = linearToSrgbByte(b);
-        colorPixels[i + 3] = 255;
 
-        const blenderMetal = linearRamp(maskR, 0.340, 0.578);
-        const metalness = blenderMetal * MAX_METALNESS;
-        const metalByte = Math.round(metalness * 255);
+    const maskData =
+        maskContext.getImageData(
 
-        metalPixels[i] = metalByte;
-        metalPixels[i + 1] = metalByte;
-        metalPixels[i + 2] = metalByte;
-        metalPixels[i + 3] = 255;
+            0,
+            0,
 
-        const blenderRoughness = linearRamp(maskB, 0.051, 0.763);
-        const roughness = MIN_SILK_ROUGHNESS + (MAX_SILK_ROUGHNESS - MIN_SILK_ROUGHNESS) * blenderRoughness;
-        const roughByte = Math.round(roughness * 255);
+            width,
+            imageHeight
 
-        roughPixels[i] = roughByte;
-        roughPixels[i + 1] = roughByte;
-        roughPixels[i + 2] = roughByte;
-        roughPixels[i + 3] = 255;
+        );
+
+
+    // ------------------------------------------------------
+    // OUTPUTS
+    // ------------------------------------------------------
+
+    const colorCanvas =
+        document.createElement(
+            'canvas'
+        );
+
+
+    const metalCanvas =
+        document.createElement(
+            'canvas'
+        );
+
+
+    const roughCanvas =
+        document.createElement(
+            'canvas'
+        );
+
+
+    for (
+        const canvas of [
+
+            colorCanvas,
+
+            metalCanvas,
+
+            roughCanvas
+
+        ]
+    ) {
+
+        canvas.width =
+            width;
+
+
+        canvas.height =
+            imageHeight;
+
     }
 
-    colorContext.putImageData(colorOutput, 0, 0);
-    metalContext.putImageData(metalOutput, 0, 0);
-    roughContext.putImageData(roughOutput, 0, 0);
 
-    const colorTexture = new THREE.CanvasTexture(colorCanvas);
-    colorTexture.colorSpace = THREE.SRGBColorSpace;
+    const colorContext =
+        colorCanvas.getContext(
+            '2d'
+        );
 
-    const metalnessTexture = new THREE.CanvasTexture(metalCanvas);
-    metalnessTexture.colorSpace = THREE.NoColorSpace;
 
-    const roughnessTexture = new THREE.CanvasTexture(roughCanvas);
-    roughnessTexture.colorSpace = THREE.NoColorSpace;
+    const metalContext =
+        metalCanvas.getContext(
+            '2d'
+        );
 
-    configureTexture(colorTexture);
-    configureTexture(metalnessTexture);
-    configureTexture(roughnessTexture);
 
-    return { colorTexture, metalnessTexture, roughnessTexture };
+    const roughContext =
+        roughCanvas.getContext(
+            '2d'
+        );
+
+
+    if (
+
+        !colorContext ||
+        !metalContext ||
+        !roughContext
+
+    ) {
+
+        throw new Error(
+            'Could not create output canvases.'
+        );
+
+    }
+
+
+    const colorOutput =
+        colorContext.createImageData(
+
+            width,
+
+            imageHeight
+
+        );
+
+
+    const metalOutput =
+        metalContext.createImageData(
+
+            width,
+
+            imageHeight
+
+        );
+
+
+    const roughOutput =
+        roughContext.createImageData(
+
+            width,
+
+            imageHeight
+
+        );
+
+
+    const basePixels =
+        baseData.data;
+
+
+    const maskPixels =
+        maskData.data;
+
+
+    const colorPixels =
+        colorOutput.data;
+
+
+    const metalPixels =
+        metalOutput.data;
+
+
+    const roughPixels =
+        roughOutput.data;
+
+
+    // ------------------------------------------------------
+    // PROCESS
+    // ------------------------------------------------------
+
+    for (
+
+        let i = 0;
+
+        i < basePixels.length;
+
+        i += 4
+
+    ) {
+
+        const maskR =
+            maskPixels[i] /
+            255;
+
+
+        const maskG =
+            maskPixels[
+                i + 1
+            ] /
+            255;
+
+
+        const maskB =
+            maskPixels[
+                i + 2
+            ] /
+            255;
+
+
+        const greenModulation =
+
+            1.0 +
+
+            (
+                maskG -
+                1.0
+            )
+
+            *
+
+            COLOR_MASK_STRENGTH;
+
+
+        let r =
+            srgbByteToLinear(
+                basePixels[i]
+            );
+
+
+        let g =
+            srgbByteToLinear(
+                basePixels[
+                    i + 1
+                ]
+            );
+
+
+        let b =
+            srgbByteToLinear(
+                basePixels[
+                    i + 2
+                ]
+            );
+
+
+        r *=
+            1.3 *
+            greenModulation;
+
+
+        g *=
+            1.3 *
+            greenModulation;
+
+
+        b *=
+            1.3 *
+            greenModulation;
+
+
+        colorPixels[i] =
+            linearToSrgbByte(
+                r
+            );
+
+
+        colorPixels[
+            i + 1
+        ] =
+            linearToSrgbByte(
+                g
+            );
+
+
+        colorPixels[
+            i + 2
+        ] =
+            linearToSrgbByte(
+                b
+            );
+
+
+        colorPixels[
+            i + 3
+        ] =
+            255;
+
+
+        // --------------------------------------------------
+        // METALLIC THREAD RESPONSE
+        // --------------------------------------------------
+
+        const blenderMetal =
+            linearRamp(
+
+                maskR,
+
+                0.340,
+
+                0.578
+
+            );
+
+
+        const metalness =
+
+            blenderMetal *
+
+            MAX_METALNESS;
+
+
+        const metalByte =
+            Math.round(
+
+                metalness *
+
+                255
+
+            );
+
+
+        metalPixels[i] =
+            metalByte;
+
+
+        metalPixels[
+            i + 1
+        ] =
+            metalByte;
+
+
+        metalPixels[
+            i + 2
+        ] =
+            metalByte;
+
+
+        metalPixels[
+            i + 3
+        ] =
+            255;
+
+
+        // --------------------------------------------------
+        // ROUGHNESS
+        // --------------------------------------------------
+
+        const blenderRoughness =
+            linearRamp(
+
+                maskB,
+
+                0.051,
+
+                0.763
+
+            );
+
+
+        const roughness =
+
+            MIN_SILK_ROUGHNESS +
+
+            (
+                MAX_SILK_ROUGHNESS -
+                MIN_SILK_ROUGHNESS
+            )
+
+            *
+
+            blenderRoughness;
+
+
+        const roughByte =
+            Math.round(
+
+                roughness *
+
+                255
+
+            );
+
+
+        roughPixels[i] =
+            roughByte;
+
+
+        roughPixels[
+            i + 1
+        ] =
+            roughByte;
+
+
+        roughPixels[
+            i + 2
+        ] =
+            roughByte;
+
+
+        roughPixels[
+            i + 3
+        ] =
+            255;
+
+    }
+
+
+    colorContext.putImageData(
+
+        colorOutput,
+
+        0,
+        0
+
+    );
+
+
+    metalContext.putImageData(
+
+        metalOutput,
+
+        0,
+        0
+
+    );
+
+
+    roughContext.putImageData(
+
+        roughOutput,
+
+        0,
+        0
+
+    );
+
+
+    const colorTexture =
+        new THREE.CanvasTexture(
+            colorCanvas
+        );
+
+
+    colorTexture.colorSpace =
+        THREE.SRGBColorSpace;
+
+
+    const metalnessTexture =
+        new THREE.CanvasTexture(
+            metalCanvas
+        );
+
+
+    metalnessTexture.colorSpace =
+        THREE.NoColorSpace;
+
+
+    const roughnessTexture =
+        new THREE.CanvasTexture(
+            roughCanvas
+        );
+
+
+    roughnessTexture.colorSpace =
+        THREE.NoColorSpace;
+
+
+    configureTexture(
+        colorTexture
+    );
+
+
+    configureTexture(
+        metalnessTexture
+    );
+
+
+    configureTexture(
+        roughnessTexture
+    );
+
+
+    return {
+
+        colorTexture,
+
+        metalnessTexture,
+
+        roughnessTexture
+
+    };
+
 }
 
 
@@ -429,58 +1434,320 @@ async function createV10SilkMaps() {
 // ==========================================================
 
 let rug;
+
 let geometry;
+
 let positions;
+
 let vertexColors;
 
+
 let height;
+
 let velocity;
+
 let acceleration;
 
+
 let restX;
+
 let restY;
+
 let restZ;
 
 
 // ==========================================================
-// FRINGE STATE
+// SIDE SELVAGE / FRAY STATE
 // ==========================================================
 
-let fringeGeometry;
-let fringePositions;
-let fringeMesh;
-let fringeSpecs = [];
+let sideBandGeometryLeft;
+
+let sideBandGeometryRight;
+
+let sideBandPositionsLeft;
+
+let sideBandPositionsRight;
+
+let sideBandMeshLeft;
+
+let sideBandMeshRight;
+
+
+let sideFrayGeometryLeft;
+
+let sideFrayGeometryRight;
+
+let sideFrayPositionsLeft;
+
+let sideFrayPositionsRight;
+
+let sideFrayMeshLeft;
+
+let sideFrayMeshRight;
+
+
+let leftFraySpecs =
+    [];
+
+let rightFraySpecs =
+    [];
 
 
 // ==========================================================
 // HELPERS
 // ==========================================================
 
-function indexOf(x, y) {
-    return y * COLS + x;
+function indexOf(
+    x,
+    y
+) {
+
+    return (
+
+        y *
+        COLS
+
+        +
+
+        x
+
+    );
+
 }
 
-function clamp01(value) {
-    return Math.max(0, Math.min(1, value));
+
+function clamp01(
+    value
+) {
+
+    return Math.max(
+
+        0,
+
+        Math.min(
+            1,
+            value
+        )
+
+    );
+
 }
 
-function lerp(a, b, t) {
-    return a + (b - a) * t;
+
+function lerp(
+    a,
+    b,
+    t
+) {
+
+    return (
+
+        a +
+
+        (
+            b -
+            a
+        )
+
+        *
+
+        t
+
+    );
+
 }
 
-function smoothstep01(t) {
-    t = clamp01(t);
-    return t * t * (3 - 2 * t);
+
+function smoothstep01(
+    t
+) {
+
+    t =
+        clamp01(
+            t
+        );
+
+
+    return (
+
+        t *
+
+        t *
+
+        (
+            3 -
+            2 *
+            t
+        )
+
+    );
+
 }
 
-function pseudoRandom(seed) {
-    const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453123;
-    return x - Math.floor(x);
+
+function randomFromSeed(
+    seed
+) {
+
+    const x =
+
+        Math.sin(
+
+            seed *
+            91.173
+
+            +
+
+            17.917
+
+        )
+
+        *
+
+        43758.5453123;
+
+
+    return (
+
+        x -
+
+        Math.floor(
+            x
+        )
+
+    );
+
 }
 
-function sampleGridIndex(i, count, maxIndex) {
-    if (count <= 1) return Math.round(maxIndex * 0.5);
-    return Math.round((i / (count - 1)) * maxIndex);
+
+// ==========================================================
+// SAMPLE POSITION ALONG LEFT / RIGHT SIDE
+// ==========================================================
+//
+// This lets us use hundreds of frayed fibers even though
+// the cloth itself only has 37 vertices vertically.
+//
+// We smoothly interpolate between neighboring cloth vertices.
+// ==========================================================
+
+function sampleSideEdgePosition(
+
+    sideSign,
+
+    t,
+
+    target
+
+) {
+
+    const rowFloat =
+
+        clamp01(
+            t
+        )
+
+        *
+
+        (
+            ROWS -
+            1
+        );
+
+
+    const row0 =
+        Math.floor(
+            rowFloat
+        );
+
+
+    const row1 =
+        Math.min(
+
+            ROWS -
+            1,
+
+            row0 +
+            1
+
+        );
+
+
+    const alpha =
+
+        rowFloat -
+        row0;
+
+
+    const xIndex =
+
+        sideSign < 0
+
+            ?
+
+            0
+
+            :
+
+            COLS -
+            1;
+
+
+    const i0 =
+        indexOf(
+            xIndex,
+            row0
+        );
+
+
+    const i1 =
+        indexOf(
+            xIndex,
+            row1
+        );
+
+
+    const a =
+        geometry
+            .attributes
+            .position
+            .array;
+
+
+    const o0 =
+        i0 *
+        3;
+
+
+    const o1 =
+        i1 *
+        3;
+
+
+    target.set(
+
+        lerp(
+            a[o0],
+            a[o1],
+            alpha
+        ),
+
+        lerp(
+            a[o0 + 1],
+            a[o1 + 1],
+            alpha
+        ),
+
+        lerp(
+            a[o0 + 2],
+            a[o1 + 2],
+            alpha
+        )
+
+    );
+
+
+    return target;
+
 }
 
 
@@ -488,11 +1755,78 @@ function sampleGridIndex(i, count, maxIndex) {
 // RESTING CLOTH SHAPE
 // ==========================================================
 
-function restingHeight(x, y) {
-    const wave1 = Math.sin(x * 1.15 + y * 0.40) * 0.025;
-    const wave2 = Math.sin(x * 2.5 - y * 1.25) * 0.012;
-    const wave3 = Math.sin(y * 3.4 + x * 0.7) * 0.006;
-    return wave1 + wave2 + wave3;
+function restingHeight(
+    x,
+    y
+) {
+
+    const wave1 =
+
+        Math.sin(
+
+            x *
+            1.15
+
+            +
+
+            y *
+            0.40
+
+        )
+
+        *
+
+        0.025;
+
+
+    const wave2 =
+
+        Math.sin(
+
+            x *
+            2.5
+
+            -
+
+            y *
+            1.25
+
+        )
+
+        *
+
+        0.012;
+
+
+    const wave3 =
+
+        Math.sin(
+
+            y *
+            3.4
+
+            +
+
+            x *
+            0.7
+
+        )
+
+        *
+
+        0.006;
+
+
+    return (
+
+        wave1 +
+
+        wave2 +
+
+        wave3
+
+    );
+
 }
 
 
@@ -501,34 +1835,116 @@ function restingHeight(x, y) {
 // ==========================================================
 
 function initializeClothPhysics() {
-    positions = geometry.attributes.position;
-    positions.setUsage(THREE.DynamicDrawUsage);
 
-    const count = positions.count;
+    positions =
+        geometry
+            .attributes
+            .position;
 
-    height = new Float32Array(count);
-    velocity = new Float32Array(count);
-    acceleration = new Float32Array(count);
 
-    restX = new Float32Array(count);
-    restY = new Float32Array(count);
-    restZ = new Float32Array(count);
+    positions.setUsage(
+        THREE.DynamicDrawUsage
+    );
 
-    for (let i = 0; i < count; i++) {
-        const x = positions.getX(i);
-        const y = positions.getY(i);
-        const z = restingHeight(x, y);
 
-        restX[i] = x;
-        restY[i] = y;
-        restZ[i] = z;
+    const count =
+        positions.count;
 
-        positions.setZ(i, z);
+
+    height =
+        new Float32Array(
+            count
+        );
+
+
+    velocity =
+        new Float32Array(
+            count
+        );
+
+
+    acceleration =
+        new Float32Array(
+            count
+        );
+
+
+    restX =
+        new Float32Array(
+            count
+        );
+
+
+    restY =
+        new Float32Array(
+            count
+        );
+
+
+    restZ =
+        new Float32Array(
+            count
+        );
+
+
+    for (
+
+        let i = 0;
+
+        i < count;
+
+        i++
+
+    ) {
+
+        const x =
+            positions.getX(
+                i
+            );
+
+
+        const y =
+            positions.getY(
+                i
+            );
+
+
+        const z =
+            restingHeight(
+                x,
+                y
+            );
+
+
+        restX[i] =
+            x;
+
+
+        restY[i] =
+            y;
+
+
+        restZ[i] =
+            z;
+
+
+        positions.setZ(
+            i,
+            z
+        );
+
     }
 
-    positions.needsUpdate = true;
+
+    positions.needsUpdate =
+        true;
+
+
     geometry.computeVertexNormals();
+
+
     updateDynamicOcclusion();
+
 }
 
 
@@ -536,137 +1952,574 @@ function initializeClothPhysics() {
 // POINTER
 // ==========================================================
 
-const pointerNDC = new THREE.Vector2();
-const raycaster = new THREE.Raycaster();
-const interactionPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-const intersection = new THREE.Vector3();
+const pointerNDC =
+    new THREE.Vector2();
 
-let pointerActive = false;
 
-let targetPointerX = 0;
-let targetPointerY = 0;
+const raycaster =
+    new THREE.Raycaster();
 
-let smoothPointerX = 0;
-let smoothPointerY = 0;
 
-let previousSmoothPointerX = 0;
-let previousSmoothPointerY = 0;
+const interactionPlane =
+    new THREE.Plane(
 
-let smoothPointerSpeed = 0;
+        new THREE.Vector3(
+            0,
+            0,
+            1
+        ),
 
-let motionDirX = 1;
-let motionDirY = 0;
+        0
 
-let hasSmoothPointer = false;
-let interactionPresence = 0;
-let visualSpeed01 = 0;
+    );
+
+
+const intersection =
+    new THREE.Vector3();
+
+
+let pointerActive =
+    false;
+
+
+let targetPointerX =
+    0;
+
+
+let targetPointerY =
+    0;
+
+
+let smoothPointerX =
+    0;
+
+
+let smoothPointerY =
+    0;
+
+
+let previousSmoothPointerX =
+    0;
+
+
+let previousSmoothPointerY =
+    0;
+
+
+let smoothPointerSpeed =
+    0;
+
+
+let motionDirX =
+    1;
+
+
+let motionDirY =
+    0;
+
+
+let hasSmoothPointer =
+    false;
+
+
+let interactionPresence =
+    0;
+
+
+let visualSpeed01 =
+    0;
 
 
 // ==========================================================
 // POINTER MOVE
 // ==========================================================
 
-function onPointerMove(event) {
-    const rect = renderer.domElement.getBoundingClientRect();
+function onPointerMove(
+    event
+) {
 
-    pointerNDC.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    pointerNDC.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    const rect =
 
-    raycaster.setFromCamera(pointerNDC, camera);
-    const hit = raycaster.ray.intersectPlane(interactionPlane, intersection);
+        renderer.domElement
+            .getBoundingClientRect();
 
-    if (!hit) {
-        pointerActive = false;
+
+    pointerNDC.x =
+
+        (
+            (
+                event.clientX -
+                rect.left
+            )
+
+            /
+
+            rect.width
+        )
+
+        *
+
+        2
+
+        -
+
+        1;
+
+
+    pointerNDC.y =
+
+        -(
+
+            (
+                event.clientY -
+                rect.top
+            )
+
+            /
+
+            rect.height
+
+        )
+
+        *
+
+        2
+
+        +
+
+        1;
+
+
+    raycaster.setFromCamera(
+
+        pointerNDC,
+
+        camera
+
+    );
+
+
+    const hit =
+
+        raycaster.ray
+            .intersectPlane(
+
+                interactionPlane,
+
+                intersection
+
+            );
+
+
+    if (
+        !hit
+    ) {
+
+        pointerActive =
+            false;
+
+
         return;
+
     }
+
 
     const inside =
-        Math.abs(intersection.x) <= RUG_WIDTH / 2 &&
-        Math.abs(intersection.y) <= RUG_HEIGHT / 2;
 
-    if (!inside) {
-        pointerActive = false;
+        Math.abs(
+            intersection.x
+        )
+
+        <=
+
+        RUG_WIDTH /
+        2
+
+        &&
+
+        Math.abs(
+            intersection.y
+        )
+
+        <=
+
+        RUG_HEIGHT /
+        2;
+
+
+    if (
+        !inside
+    ) {
+
+        pointerActive =
+            false;
+
+
         return;
+
     }
 
-    targetPointerX = intersection.x;
-    targetPointerY = intersection.y;
 
-    if (!hasSmoothPointer) {
-        smoothPointerX = targetPointerX;
-        smoothPointerY = targetPointerY;
-        previousSmoothPointerX = smoothPointerX;
-        previousSmoothPointerY = smoothPointerY;
-        hasSmoothPointer = true;
+    targetPointerX =
+        intersection.x;
+
+
+    targetPointerY =
+        intersection.y;
+
+
+    if (
+        !hasSmoothPointer
+    ) {
+
+        smoothPointerX =
+            targetPointerX;
+
+
+        smoothPointerY =
+            targetPointerY;
+
+
+        previousSmoothPointerX =
+            smoothPointerX;
+
+
+        previousSmoothPointerY =
+            smoothPointerY;
+
+
+        hasSmoothPointer =
+            true;
+
     }
 
-    pointerActive = true;
+
+    pointerActive =
+        true;
+
 }
+
 
 function onPointerLeave() {
-    pointerActive = false;
-    hasSmoothPointer = false;
-    smoothPointerSpeed = 0;
+
+    pointerActive =
+        false;
+
+
+    hasSmoothPointer =
+        false;
+
+
+    smoothPointerSpeed =
+        0;
+
 }
 
-renderer.domElement.addEventListener('pointermove', onPointerMove);
-renderer.domElement.addEventListener('pointerleave', onPointerLeave);
+
+renderer.domElement.addEventListener(
+
+    'pointermove',
+
+    onPointerMove
+
+);
+
+
+renderer.domElement.addEventListener(
+
+    'pointerleave',
+
+    onPointerLeave
+
+);
 
 
 // ==========================================================
 // SMOOTH POINTER
 // ==========================================================
 
-function updateSmoothPointer(dt) {
-    const presenceTarget = pointerActive ? 1 : 0;
-    const presenceFollow = 1 - Math.exp(-10 * dt);
+function updateSmoothPointer(
+    dt
+) {
 
-    interactionPresence += (presenceTarget - interactionPresence) * presenceFollow;
+    const presenceTarget =
 
-    if (!pointerActive) {
-        smoothPointerSpeed *= Math.exp(-10 * dt);
-        visualSpeed01 *= Math.exp(-7 * dt);
+        pointerActive
+
+            ?
+
+            1
+
+            :
+
+            0;
+
+
+    const presenceFollow =
+
+        1
+
+        -
+
+        Math.exp(
+            -10 *
+            dt
+        );
+
+
+    interactionPresence +=
+
+        (
+            presenceTarget -
+            interactionPresence
+        )
+
+        *
+
+        presenceFollow;
+
+
+    if (
+        !pointerActive
+    ) {
+
+        smoothPointerSpeed *=
+
+            Math.exp(
+                -10 *
+                dt
+            );
+
+
+        visualSpeed01 *=
+
+            Math.exp(
+                -7 *
+                dt
+            );
+
+
         return;
+
     }
 
-    const follow = 1 - Math.exp(-POINTER_FOLLOW_SPEED * dt);
 
-    smoothPointerX += (targetPointerX - smoothPointerX) * follow;
-    smoothPointerY += (targetPointerY - smoothPointerY) * follow;
+    const follow =
 
-    const dx = smoothPointerX - previousSmoothPointerX;
-    const dy = smoothPointerY - previousSmoothPointerY;
+        1
 
-    const instantaneousVX = dx / Math.max(dt, 0.0001);
-    const instantaneousVY = dy / Math.max(dt, 0.0001);
+        -
 
-    const instantaneousSpeed = Math.sqrt(
-        instantaneousVX * instantaneousVX +
-        instantaneousVY * instantaneousVY
-    );
+        Math.exp(
 
-    previousSmoothPointerX = smoothPointerX;
-    previousSmoothPointerY = smoothPointerY;
+            -POINTER_FOLLOW_SPEED *
 
-    const speedFollow = 1 - Math.exp(-SPEED_SMOOTHING * dt);
-    smoothPointerSpeed += (instantaneousSpeed - smoothPointerSpeed) * speedFollow;
+            dt
 
-    if (instantaneousSpeed > DIRECTION_UPDATE_THRESHOLD) {
-        const targetDirX = instantaneousVX / instantaneousSpeed;
-        const targetDirY = instantaneousVY / instantaneousSpeed;
+        );
 
-        const directionFollow = 1 - Math.exp(-DIRECTION_FOLLOW_SPEED * dt);
 
-        motionDirX += (targetDirX - motionDirX) * directionFollow;
-        motionDirY += (targetDirY - motionDirY) * directionFollow;
+    smoothPointerX +=
 
-        const directionLength = Math.sqrt(motionDirX * motionDirX + motionDirY * motionDirY);
+        (
+            targetPointerX -
+            smoothPointerX
+        )
 
-        if (directionLength > 0.0001) {
-            motionDirX /= directionLength;
-            motionDirY /= directionLength;
+        *
+
+        follow;
+
+
+    smoothPointerY +=
+
+        (
+            targetPointerY -
+            smoothPointerY
+        )
+
+        *
+
+        follow;
+
+
+    const dx =
+
+        smoothPointerX -
+        previousSmoothPointerX;
+
+
+    const dy =
+
+        smoothPointerY -
+        previousSmoothPointerY;
+
+
+    const instantaneousVX =
+
+        dx /
+
+        Math.max(
+            dt,
+            0.0001
+        );
+
+
+    const instantaneousVY =
+
+        dy /
+
+        Math.max(
+            dt,
+            0.0001
+        );
+
+
+    const instantaneousSpeed =
+
+        Math.sqrt(
+
+            instantaneousVX *
+            instantaneousVX
+
+            +
+
+            instantaneousVY *
+            instantaneousVY
+
+        );
+
+
+    previousSmoothPointerX =
+        smoothPointerX;
+
+
+    previousSmoothPointerY =
+        smoothPointerY;
+
+
+    const speedFollow =
+
+        1
+
+        -
+
+        Math.exp(
+
+            -SPEED_SMOOTHING *
+
+            dt
+
+        );
+
+
+    smoothPointerSpeed +=
+
+        (
+            instantaneousSpeed -
+            smoothPointerSpeed
+        )
+
+        *
+
+        speedFollow;
+
+
+    if (
+
+        instantaneousSpeed >
+
+        DIRECTION_UPDATE_THRESHOLD
+
+    ) {
+
+        const targetDirX =
+
+            instantaneousVX /
+
+            instantaneousSpeed;
+
+
+        const targetDirY =
+
+            instantaneousVY /
+
+            instantaneousSpeed;
+
+
+        const directionFollow =
+
+            1
+
+            -
+
+            Math.exp(
+
+                -DIRECTION_FOLLOW_SPEED *
+
+                dt
+
+            );
+
+
+        motionDirX +=
+
+            (
+                targetDirX -
+                motionDirX
+            )
+
+            *
+
+            directionFollow;
+
+
+        motionDirY +=
+
+            (
+                targetDirY -
+                motionDirY
+            )
+
+            *
+
+            directionFollow;
+
+
+        const directionLength =
+
+            Math.sqrt(
+
+                motionDirX *
+                motionDirX
+
+                +
+
+                motionDirY *
+                motionDirY
+
+            );
+
+
+        if (
+
+            directionLength >
+
+            0.0001
+
+        ) {
+
+            motionDirX /=
+                directionLength;
+
+
+            motionDirY /=
+                directionLength;
+
         }
+
     }
+
 }
 
 
@@ -675,20 +2528,99 @@ function updateSmoothPointer(dt) {
 // ==========================================================
 
 function getPointerEffect() {
-    const normalizedSpeed = (smoothPointerSpeed - SPEED_DEADZONE) / (SPEED_FULL_EFFECT - SPEED_DEADZONE);
 
-    let speed01 = smoothstep01(normalizedSpeed);
-    speed01 = Math.pow(speed01, 1.35);
+    const normalizedSpeed =
 
-    visualSpeed01 = speed01;
+        (
+            smoothPointerSpeed -
+            SPEED_DEADZONE
+        )
+
+        /
+
+        (
+            SPEED_FULL_EFFECT -
+            SPEED_DEADZONE
+        );
+
+
+    let speed01 =
+
+        smoothstep01(
+            normalizedSpeed
+        );
+
+
+    speed01 =
+
+        Math.pow(
+            speed01,
+            1.35
+        );
+
+
+    visualSpeed01 =
+        speed01;
+
 
     return {
+
         speed01,
-        bulge: lerp(MIN_BULGE, MAX_BULGE, speed01),
-        radius: lerp(MIN_RADIUS, MAX_RADIUS, speed01),
-        stiffness: lerp(MIN_POINTER_STIFFNESS, MAX_POINTER_STIFFNESS, speed01),
-        localDamping: lerp(SLOW_POINTER_DAMPING, FAST_POINTER_DAMPING, speed01)
+
+
+        bulge:
+
+            lerp(
+
+                MIN_BULGE,
+
+                MAX_BULGE,
+
+                speed01
+
+            ),
+
+
+        radius:
+
+            lerp(
+
+                MIN_RADIUS,
+
+                MAX_RADIUS,
+
+                speed01
+
+            ),
+
+
+        stiffness:
+
+            lerp(
+
+                MIN_POINTER_STIFFNESS,
+
+                MAX_POINTER_STIFFNESS,
+
+                speed01
+
+            ),
+
+
+        localDamping:
+
+            lerp(
+
+                SLOW_POINTER_DAMPING,
+
+                FAST_POINTER_DAMPING,
+
+                speed01
+
+            )
+
     };
+
 }
 
 
@@ -696,89 +2628,420 @@ function getPointerEffect() {
 // CLOTH SIMULATION
 // ==========================================================
 
-function simulateCloth(dt) {
-    updateSmoothPointer(dt);
-    acceleration.fill(0);
+function simulateCloth(
+    dt
+) {
 
-    const step = dt * 60;
+    updateSmoothPointer(
+        dt
+    );
 
-    for (let y = 1; y < ROWS - 1; y++) {
-        for (let x = 1; x < COLS - 1; x++) {
-            const i = indexOf(x, y);
-            const left = indexOf(x - 1, y);
-            const right = indexOf(x + 1, y);
-            const down = indexOf(x, y - 1);
-            const up = indexOf(x, y + 1);
 
-            const neighborAverage = (height[left] + height[right] + height[down] + height[up]) * 0.25;
+    acceleration.fill(
+        0
+    );
 
-            acceleration[i] += (neighborAverage - height[i]) * TENSION;
-            acceleration[i] += -height[i] * RESTORE_FORCE;
+
+    const step =
+        dt *
+        60;
+
+
+    // ------------------------------------------------------
+    // SPRINGS
+    // ------------------------------------------------------
+
+    for (
+
+        let y = 1;
+
+        y < ROWS - 1;
+
+        y++
+
+    ) {
+
+        for (
+
+            let x = 1;
+
+            x < COLS - 1;
+
+            x++
+
+        ) {
+
+            const i =
+                indexOf(
+                    x,
+                    y
+                );
+
+
+            const left =
+                indexOf(
+                    x - 1,
+                    y
+                );
+
+
+            const right =
+                indexOf(
+                    x + 1,
+                    y
+                );
+
+
+            const down =
+                indexOf(
+                    x,
+                    y - 1
+                );
+
+
+            const up =
+                indexOf(
+                    x,
+                    y + 1
+                );
+
+
+            const neighborAverage =
+
+                (
+                    height[left] +
+
+                    height[right] +
+
+                    height[down] +
+
+                    height[up]
+                )
+
+                *
+
+                0.25;
+
+
+            acceleration[i] +=
+
+                (
+                    neighborAverage -
+                    height[i]
+                )
+
+                *
+
+                TENSION;
+
+
+            acceleration[i] +=
+
+                -height[i] *
+
+                RESTORE_FORCE;
+
         }
+
     }
 
-    if (pointerActive && hasSmoothPointer) {
-        const effect = getPointerEffect();
-        const radiusSquared = effect.radius * effect.radius;
 
-        for (let y = 1; y < ROWS - 1; y++) {
-            for (let x = 1; x < COLS - 1; x++) {
-                const i = indexOf(x, y);
+    // ------------------------------------------------------
+    // POINTER FORCE
+    // ------------------------------------------------------
 
-                const dx = restX[i] - smoothPointerX;
-                const dy = restY[i] - smoothPointerY;
-                const distanceSquared = dx * dx + dy * dy;
+    if (
 
-                if (distanceSquared < radiusSquared) {
-                    const distance = Math.sqrt(distanceSquared);
+        pointerActive &&
 
-                    let influence = 1 - distance / effect.radius;
-                    influence = smoothstep01(influence);
+        hasSmoothPointer
 
-                    const targetHeight = effect.bulge * influence;
-                    const error = targetHeight - height[i];
+    ) {
 
-                    acceleration[i] += error * effect.stiffness;
-                    acceleration[i] -= velocity[i] * effect.localDamping * influence;
+        const effect =
+            getPointerEffect();
+
+
+        const radiusSquared =
+
+            effect.radius *
+
+            effect.radius;
+
+
+        for (
+
+            let y = 1;
+
+            y < ROWS - 1;
+
+            y++
+
+        ) {
+
+            for (
+
+                let x = 1;
+
+                x < COLS - 1;
+
+                x++
+
+            ) {
+
+                const i =
+                    indexOf(
+                        x,
+                        y
+                    );
+
+
+                const dx =
+
+                    restX[i] -
+                    smoothPointerX;
+
+
+                const dy =
+
+                    restY[i] -
+                    smoothPointerY;
+
+
+                const distanceSquared =
+
+                    dx *
+                    dx
+
+                    +
+
+                    dy *
+                    dy;
+
+
+                if (
+
+                    distanceSquared <
+                    radiusSquared
+
+                ) {
+
+                    const distance =
+
+                        Math.sqrt(
+                            distanceSquared
+                        );
+
+
+                    let influence =
+
+                        1
+
+                        -
+
+                        distance /
+                        effect.radius;
+
+
+                    influence =
+
+                        smoothstep01(
+                            influence
+                        );
+
+
+                    const targetHeight =
+
+                        effect.bulge *
+
+                        influence;
+
+
+                    const error =
+
+                        targetHeight -
+
+                        height[i];
+
+
+                    acceleration[i] +=
+
+                        error *
+
+                        effect.stiffness;
+
+
+                    acceleration[i] -=
+
+                        velocity[i] *
+
+                        effect.localDamping *
+
+                        influence;
+
                 }
+
             }
+
         }
+
     }
 
-    const frameDamping = Math.pow(DAMPING, step);
 
-    for (let y = 1; y < ROWS - 1; y++) {
-        for (let x = 1; x < COLS - 1; x++) {
-            const i = indexOf(x, y);
+    // ------------------------------------------------------
+    // INTEGRATE
+    // ------------------------------------------------------
 
-            velocity[i] += acceleration[i] * step;
-            velocity[i] *= frameDamping;
-            height[i] += velocity[i] * step;
+    const frameDamping =
+
+        Math.pow(
+
+            DAMPING,
+
+            step
+
+        );
+
+
+    for (
+
+        let y = 1;
+
+        y < ROWS - 1;
+
+        y++
+
+    ) {
+
+        for (
+
+            let x = 1;
+
+            x < COLS - 1;
+
+            x++
+
+        ) {
+
+            const i =
+                indexOf(
+                    x,
+                    y
+                );
+
+
+            velocity[i] +=
+
+                acceleration[i] *
+
+                step;
+
+
+            velocity[i] *=
+                frameDamping;
+
+
+            height[i] +=
+
+                velocity[i] *
+
+                step;
+
         }
+
     }
 
-    // Pinned perimeter
-    for (let x = 0; x < COLS; x++) {
-        const bottom = indexOf(x, 0);
-        const top = indexOf(x, ROWS - 1);
 
-        height[bottom] = 0;
-        velocity[bottom] = 0;
+    // ------------------------------------------------------
+    // STABLE PERIMETER
+    //
+    // The fray hangs from a stable rug edge instead of
+    // letting the rug flip over near the sides.
+    // ------------------------------------------------------
 
-        height[top] = 0;
-        velocity[top] = 0;
+    for (
+
+        let x = 0;
+
+        x < COLS;
+
+        x++
+
+    ) {
+
+        const bottom =
+            indexOf(
+                x,
+                0
+            );
+
+
+        const top =
+            indexOf(
+                x,
+                ROWS - 1
+            );
+
+
+        height[bottom] =
+            0;
+
+
+        velocity[bottom] =
+            0;
+
+
+        height[top] =
+            0;
+
+
+        velocity[top] =
+            0;
+
     }
 
-    for (let y = 0; y < ROWS; y++) {
-        const left = indexOf(0, y);
-        const right = indexOf(COLS - 1, y);
 
-        height[left] = 0;
-        velocity[left] = 0;
+    for (
 
-        height[right] = 0;
-        velocity[right] = 0;
+        let y = 0;
+
+        y < ROWS;
+
+        y++
+
+    ) {
+
+        const left =
+            indexOf(
+                0,
+                y
+            );
+
+
+        const right =
+            indexOf(
+                COLS - 1,
+                y
+            );
+
+
+        height[left] =
+            0;
+
+
+        velocity[left] =
+            0;
+
+
+        height[right] =
+            0;
+
+
+        velocity[right] =
+            0;
+
     }
+
 }
 
 
@@ -787,249 +3050,1568 @@ function simulateCloth(dt) {
 // ==========================================================
 
 function updateDynamicOcclusion() {
-    if (!positions || !vertexColors || !restZ) return;
 
-    const posArray = positions.array;
-    const colorArray = vertexColors.array;
+    if (
 
-    const halfWidth = RUG_WIDTH / 2;
-    const halfHeight = RUG_HEIGHT / 2;
+        !positions ||
 
-    for (let y = 0; y < ROWS; y++) {
-        for (let x = 0; x < COLS; x++) {
-            const i = indexOf(x, y);
-            const baseIndex = i * 3;
+        !vertexColors ||
 
-            let brightness = 1.0;
+        !restZ
 
-            if (x > 0 && x < COLS - 1 && y > 0 && y < ROWS - 1) {
-                const left = indexOf(x - 1, y);
-                const right = indexOf(x + 1, y);
-                const down = indexOf(x, y - 1);
-                const up = indexOf(x, y + 1);
+    ) {
 
-                const centerDisp = posArray[baseIndex + 2] - restZ[i];
-                const leftDisp = posArray[left * 3 + 2] - restZ[left];
-                const rightDisp = posArray[right * 3 + 2] - restZ[right];
-                const downDisp = posArray[down * 3 + 2] - restZ[down];
-                const upDisp = posArray[up * 3 + 2] - restZ[up];
+        return;
 
-                const neighborAverage = (leftDisp + rightDisp + downDisp + upDisp) * 0.25;
-                const curvature = neighborAverage - centerDisp;
+    }
 
-                const valley01 = smoothstep01((curvature - CURVATURE_START) / (CURVATURE_END - CURVATURE_START));
-                const crest01 = smoothstep01((-curvature - CURVATURE_START) / (CURVATURE_END - CURVATURE_START));
 
-                const rawBrightness =
-                    1.0 -
-                    valley01 * VALLEY_DARKEN_STRENGTH +
-                    crest01 * CREST_LIGHTEN_STRENGTH;
+    const posArray =
+        positions.array;
 
-                const edgeDistanceX = halfWidth - Math.abs(restX[i]);
-                const edgeDistanceY = halfHeight - Math.abs(restY[i]);
 
-                const edgeFade = smoothstep01(
-                    Math.min(edgeDistanceX / 0.38, edgeDistanceY / 0.38)
+    const colorArray =
+        vertexColors.array;
+
+
+    const halfWidth =
+        RUG_WIDTH /
+        2;
+
+
+    const halfHeight =
+        RUG_HEIGHT /
+        2;
+
+
+    for (
+
+        let y = 0;
+
+        y < ROWS;
+
+        y++
+
+    ) {
+
+        for (
+
+            let x = 0;
+
+            x < COLS;
+
+            x++
+
+        ) {
+
+            const i =
+                indexOf(
+                    x,
+                    y
                 );
 
-                brightness = lerp(1.0, rawBrightness, edgeFade);
+
+            const baseIndex =
+                i *
+                3;
+
+
+            let brightness =
+                1.0;
+
+
+            if (
+
+                x > 0 &&
+
+                x < COLS - 1 &&
+
+                y > 0 &&
+
+                y < ROWS - 1
+
+            ) {
+
+                const left =
+                    indexOf(
+                        x - 1,
+                        y
+                    );
+
+
+                const right =
+                    indexOf(
+                        x + 1,
+                        y
+                    );
+
+
+                const down =
+                    indexOf(
+                        x,
+                        y - 1
+                    );
+
+
+                const up =
+                    indexOf(
+                        x,
+                        y + 1
+                    );
+
+
+                const centerDisp =
+
+                    posArray[
+                        baseIndex + 2
+                    ]
+
+                    -
+
+                    restZ[i];
+
+
+                const leftDisp =
+
+                    posArray[
+                        left * 3 + 2
+                    ]
+
+                    -
+
+                    restZ[left];
+
+
+                const rightDisp =
+
+                    posArray[
+                        right * 3 + 2
+                    ]
+
+                    -
+
+                    restZ[right];
+
+
+                const downDisp =
+
+                    posArray[
+                        down * 3 + 2
+                    ]
+
+                    -
+
+                    restZ[down];
+
+
+                const upDisp =
+
+                    posArray[
+                        up * 3 + 2
+                    ]
+
+                    -
+
+                    restZ[up];
+
+
+                const neighborAverage =
+
+                    (
+                        leftDisp +
+
+                        rightDisp +
+
+                        downDisp +
+
+                        upDisp
+                    )
+
+                    *
+
+                    0.25;
+
+
+                const curvature =
+
+                    neighborAverage -
+
+                    centerDisp;
+
+
+                const valley01 =
+
+                    smoothstep01(
+
+                        (
+                            curvature -
+                            CURVATURE_START
+                        )
+
+                        /
+
+                        (
+                            CURVATURE_END -
+                            CURVATURE_START
+                        )
+
+                    );
+
+
+                const crest01 =
+
+                    smoothstep01(
+
+                        (
+                            -curvature -
+                            CURVATURE_START
+                        )
+
+                        /
+
+                        (
+                            CURVATURE_END -
+                            CURVATURE_START
+                        )
+
+                    );
+
+
+                const rawBrightness =
+
+                    1.0
+
+                    -
+
+                    valley01 *
+                    VALLEY_DARKEN_STRENGTH
+
+                    +
+
+                    crest01 *
+                    CREST_LIGHTEN_STRENGTH;
+
+
+                const edgeDistanceX =
+
+                    halfWidth -
+
+                    Math.abs(
+                        restX[i]
+                    );
+
+
+                const edgeDistanceY =
+
+                    halfHeight -
+
+                    Math.abs(
+                        restY[i]
+                    );
+
+
+                const edgeFade =
+
+                    smoothstep01(
+
+                        Math.min(
+
+                            edgeDistanceX /
+                            0.38,
+
+                            edgeDistanceY /
+                            0.38
+
+                        )
+
+                    );
+
+
+                brightness =
+
+                    lerp(
+
+                        1.0,
+
+                        rawBrightness,
+
+                        edgeFade
+
+                    );
+
             }
 
-            brightness = THREE.MathUtils.clamp(brightness, 0.58, 1.03);
 
-            colorArray[baseIndex] = brightness;
-            colorArray[baseIndex + 1] = brightness;
-            colorArray[baseIndex + 2] = brightness;
+            brightness =
+
+                THREE.MathUtils.clamp(
+
+                    brightness,
+
+                    0.58,
+
+                    1.03
+
+                );
+
+
+            colorArray[
+                baseIndex
+            ] =
+                brightness;
+
+
+            colorArray[
+                baseIndex + 1
+            ] =
+                brightness;
+
+
+            colorArray[
+                baseIndex + 2
+            ] =
+                brightness;
+
         }
+
     }
 
-    vertexColors.needsUpdate = true;
+
+    vertexColors.needsUpdate =
+        true;
+
 }
 
 
 // ==========================================================
-// FRINGE GENERATION
+// BUILD SIDE FRAY SPECS
 // ==========================================================
 
-function pushFringeSpec(sourceIndex, outwardX, outwardY, tangentX, tangentY, sideScale, seed) {
-    const randA = pseudoRandom(seed + 1.123);
-    const randB = pseudoRandom(seed + 8.731);
-    const randC = pseudoRandom(seed + 17.271);
+function buildSideFraySpecs(
+    sideSign
+) {
 
-    const length = lerp(FRINGE_MIN_LENGTH, FRINGE_MAX_LENGTH, randA) * sideScale;
-    const width = lerp(FRINGE_MIN_WIDTH, FRINGE_MAX_WIDTH, randB) * (sideScale < 1 ? FRINGE_SIDE_WIDTH_SCALE : 1.0);
-    const sidewaysOffset = (randC - 0.5) * width * 1.4;
+    const specs =
+        [];
 
-    fringeSpecs.push({
-        sourceIndex,
-        outwardX,
-        outwardY,
-        tangentX,
-        tangentY,
-        length,
-        width,
-        sidewaysOffset
-    });
+
+    for (
+
+        let i = 0;
+
+        i <
+        SIDE_FRAY_STRANDS_PER_SIDE;
+
+        i++
+
+    ) {
+
+        const tBase =
+
+            SIDE_FRAY_STRANDS_PER_SIDE <=
+            1
+
+                ?
+
+                0.5
+
+                :
+
+                i /
+
+                (
+                    SIDE_FRAY_STRANDS_PER_SIDE -
+                    1
+                );
+
+
+        const r1 =
+            randomFromSeed(
+
+                1000 +
+
+                i *
+                1.371 +
+
+                sideSign *
+                11.0
+
+            );
+
+
+        const r2 =
+            randomFromSeed(
+
+                2000 +
+
+                i *
+                2.173 +
+
+                sideSign *
+                13.0
+
+            );
+
+
+        const r3 =
+            randomFromSeed(
+
+                3000 +
+
+                i *
+                3.913 +
+
+                sideSign *
+                17.0
+
+            );
+
+
+        const r4 =
+            randomFromSeed(
+
+                4000 +
+
+                i *
+                5.117 +
+
+                sideSign *
+                19.0
+
+            );
+
+
+        const r5 =
+            randomFromSeed(
+
+                5000 +
+
+                i *
+                7.331 +
+
+                sideSign *
+                23.0
+
+            );
+
+
+        let length =
+
+            lerp(
+
+                SIDE_FRAY_MIN_LENGTH,
+
+                SIDE_FRAY_MAX_LENGTH,
+
+                Math.pow(
+                    r1,
+                    1.5
+                )
+
+            );
+
+
+        // Create occasional tiny/gapped strands.
+        if (
+
+            r5 <
+            SIDE_FRAY_GAP_CHANCE
+
+        ) {
+
+            length *=
+                SIDE_FRAY_GAP_LENGTH_SCALE;
+
+        }
+
+
+        specs.push({
+
+            t:
+
+                clamp01(
+
+                    tBase
+
+                    +
+
+                    (
+                        r2 -
+                        0.5
+                    )
+
+                    *
+
+                    0.012
+
+                ),
+
+
+            length:
+
+
+                length,
+
+
+            width:
+
+                lerp(
+
+                    SIDE_FRAY_MIN_WIDTH,
+
+                    SIDE_FRAY_MAX_WIDTH,
+
+                    r3
+
+                ),
+
+
+            baseYOffset:
+
+                (
+                    r4 -
+                    0.5
+                )
+
+                *
+
+                SIDE_FRAY_Y_JITTER,
+
+
+            tipYSway:
+
+                (
+                    r2 -
+                    0.5
+                )
+
+                *
+
+                SIDE_FRAY_TIP_Y_SWAY,
+
+
+            zJitter:
+
+                (
+                    r3 -
+                    0.5
+                )
+
+                *
+
+                SIDE_FRAY_Z_JITTER
+
+        });
+
+    }
+
+
+    return specs;
+
 }
 
-function buildFringeSpecs() {
-    fringeSpecs = [];
 
-    // Bottom edge
-    for (let i = 0; i < TOP_BOTTOM_FRINGE_COUNT; i++) {
-        const x = sampleGridIndex(i, TOP_BOTTOM_FRINGE_COUNT, COLS - 1);
-        pushFringeSpec(indexOf(x, 0), 0, -1, 1, 0, 1.0, 1000 + i);
-    }
+// ==========================================================
+// CREATE SIDE FRAY SYSTEM
+// ==========================================================
 
-    // Top edge
-    for (let i = 0; i < TOP_BOTTOM_FRINGE_COUNT; i++) {
-        const x = sampleGridIndex(i, TOP_BOTTOM_FRINGE_COUNT, COLS - 1);
-        pushFringeSpec(indexOf(x, ROWS - 1), 0, 1, 1, 0, 1.0, 2000 + i);
-    }
+function createSideFraySystem() {
 
-    // Left edge
-    for (let i = 0; i < SIDE_FRINGE_COUNT; i++) {
-        const y = sampleGridIndex(i, SIDE_FRINGE_COUNT, ROWS - 1);
-        pushFringeSpec(indexOf(0, y), -1, 0, 0, 1, FRINGE_SIDE_LENGTH_SCALE, 3000 + i);
-    }
+    leftFraySpecs =
+        buildSideFraySpecs(
+            -1
+        );
 
-    // Right edge
-    for (let i = 0; i < SIDE_FRINGE_COUNT; i++) {
-        const y = sampleGridIndex(i, SIDE_FRINGE_COUNT, ROWS - 1);
-        pushFringeSpec(indexOf(COLS - 1, y), 1, 0, 0, 1, FRINGE_SIDE_LENGTH_SCALE, 4000 + i);
-    }
+
+    rightFraySpecs =
+        buildSideFraySpecs(
+            1
+        );
+
+
+    createSideBandMeshes();
+
+    createSideFrayMeshes();
+
+    updateSideFrayGeometry();
+
 }
 
-function createFringeMesh() {
-    buildFringeSpecs();
 
-    const strandCount = fringeSpecs.length;
-    const positionArray = new Float32Array(strandCount * 4 * 3);
-    const indexArray = [];
+// ==========================================================
+// CREATE WOVEN SIDE BANDS
+// ==========================================================
 
-    for (let s = 0; s < strandCount; s++) {
-        const base = s * 4;
+function createSideBandMeshes() {
+
+    const stripVertexCount =
+        ROWS *
+        2;
+
+
+    const stripIndices =
+        [];
+
+
+    for (
+
+        let y = 0;
+
+        y < ROWS - 1;
+
+        y++
+
+    ) {
+
+        const a =
+            y *
+            2;
+
+
+        const b =
+            a +
+            1;
+
+
+        const c =
+            a +
+            2;
+
+
+        const d =
+            a +
+            3;
+
+
+        stripIndices.push(
+
+            a,
+            b,
+            c,
+
+            b,
+            d,
+            c
+
+        );
+
+    }
+
+
+    function makeBandGeometry() {
+
+        const g =
+            new THREE.BufferGeometry();
+
+
+        const p =
+            new THREE.BufferAttribute(
+
+                new Float32Array(
+
+                    stripVertexCount *
+                    3
+
+                ),
+
+                3
+
+            );
+
+
+        p.setUsage(
+            THREE.DynamicDrawUsage
+        );
+
+
+        g.setAttribute(
+
+            'position',
+
+            p
+
+        );
+
+
+        g.setIndex(
+            stripIndices
+        );
+
+
+        return {
+
+            geometry:
+                g,
+
+            positions:
+                p
+
+        };
+
+    }
+
+
+    const left =
+        makeBandGeometry();
+
+
+    sideBandGeometryLeft =
+        left.geometry;
+
+
+    sideBandPositionsLeft =
+        left.positions;
+
+
+    const right =
+        makeBandGeometry();
+
+
+    sideBandGeometryRight =
+        right.geometry;
+
+
+    sideBandPositionsRight =
+        right.positions;
+
+
+    const bandMaterial =
+        new THREE.MeshPhysicalMaterial({
+
+            color:
+                SIDE_BAND_COLOR,
+
+
+            metalness:
+                0,
+
+
+            roughness:
+                0.90,
+
+
+            sheen:
+                0.10,
+
+
+            sheenColor:
+                new THREE.Color(
+                    0x9a756d
+                ),
+
+
+            sheenRoughness:
+                0.95,
+
+
+            specularIntensity:
+                0.12,
+
+
+            envMapIntensity:
+                0.05,
+
+
+            side:
+                THREE.DoubleSide
+
+        });
+
+
+    sideBandMeshLeft =
+        new THREE.Mesh(
+
+            sideBandGeometryLeft,
+
+            bandMaterial
+
+        );
+
+
+    sideBandMeshRight =
+        new THREE.Mesh(
+
+            sideBandGeometryRight,
+
+            bandMaterial.clone()
+
+        );
+
+
+    for (
+        const mesh of [
+
+            sideBandMeshLeft,
+
+            sideBandMeshRight
+
+        ]
+    ) {
+
+        mesh.castShadow =
+            true;
+
+
+        mesh.receiveShadow =
+            true;
+
+
+        mesh.frustumCulled =
+            false;
+
+
+        scene.add(
+            mesh
+        );
+
+    }
+
+}
+
+
+// ==========================================================
+// CREATE SIDE FRAY FIBERS
+// ==========================================================
+
+function createSideFrayMeshes() {
+
+    const strandCount =
+        SIDE_FRAY_STRANDS_PER_SIDE;
+
+
+    const indexArray =
+        [];
+
+
+    for (
+
+        let i = 0;
+
+        i < strandCount;
+
+        i++
+
+    ) {
+
+        const base =
+            i *
+            4;
+
 
         indexArray.push(
-            base + 0, base + 1, base + 2,
-            base + 2, base + 1, base + 3
+
+            base + 0,
+            base + 1,
+            base + 2,
+
+            base + 2,
+            base + 1,
+            base + 3
+
         );
+
     }
 
-    fringeGeometry = new THREE.BufferGeometry();
-    fringePositions = new THREE.BufferAttribute(positionArray, 3);
-    fringePositions.setUsage(THREE.DynamicDrawUsage);
 
-    fringeGeometry.setAttribute('position', fringePositions);
-    fringeGeometry.setIndex(indexArray);
+    function makeFrayGeometry() {
 
-    const fringeMaterial = new THREE.MeshPhysicalMaterial({
-        color: FRINGE_COLOR,
-        roughness: 0.92,
-        metalness: 0.0,
-        sheen: 0.18,
-        sheenColor: new THREE.Color(0xf4ede2),
-        sheenRoughness: 0.90,
-        specularIntensity: 0.15,
-        specularColor: new THREE.Color(0xf6f1e7),
-        envMapIntensity: 0.06,
-        side: THREE.DoubleSide
-    });
+        const g =
+            new THREE.BufferGeometry();
 
-    fringeMaterial.shadowSide = THREE.DoubleSide;
 
-    fringeMesh = new THREE.Mesh(fringeGeometry, fringeMaterial);
-    fringeMesh.castShadow = true;
-    fringeMesh.receiveShadow = true;
-    fringeMesh.frustumCulled = false;
+        const p =
+            new THREE.BufferAttribute(
 
-    scene.add(fringeMesh);
+                new Float32Array(
 
-    updateFringeGeometry();
+                    strandCount *
+                    4 *
+                    3
+
+                ),
+
+                3
+
+            );
+
+
+        p.setUsage(
+            THREE.DynamicDrawUsage
+        );
+
+
+        g.setAttribute(
+
+            'position',
+
+            p
+
+        );
+
+
+        g.setIndex(
+            indexArray
+        );
+
+
+        return {
+
+            geometry:
+                g,
+
+            positions:
+                p
+
+        };
+
+    }
+
+
+    const left =
+        makeFrayGeometry();
+
+
+    sideFrayGeometryLeft =
+        left.geometry;
+
+
+    sideFrayPositionsLeft =
+        left.positions;
+
+
+    const right =
+        makeFrayGeometry();
+
+
+    sideFrayGeometryRight =
+        right.geometry;
+
+
+    sideFrayPositionsRight =
+        right.positions;
+
+
+    const frayMaterial =
+        new THREE.MeshPhysicalMaterial({
+
+            color:
+                SIDE_FRAY_COLOR,
+
+
+            metalness:
+                0,
+
+
+            roughness:
+                0.98,
+
+
+            sheen:
+                0.04,
+
+
+            sheenColor:
+                new THREE.Color(
+                    0xf3ede4
+                ),
+
+
+            sheenRoughness:
+                1.0,
+
+
+            specularIntensity:
+                0.08,
+
+
+            envMapIntensity:
+                0.02,
+
+
+            side:
+                THREE.DoubleSide
+
+        });
+
+
+    sideFrayMeshLeft =
+        new THREE.Mesh(
+
+            sideFrayGeometryLeft,
+
+            frayMaterial
+
+        );
+
+
+    sideFrayMeshRight =
+        new THREE.Mesh(
+
+            sideFrayGeometryRight,
+
+            frayMaterial.clone()
+
+        );
+
+
+    for (
+        const mesh of [
+
+            sideFrayMeshLeft,
+
+            sideFrayMeshRight
+
+        ]
+    ) {
+
+        mesh.castShadow =
+            true;
+
+
+        mesh.receiveShadow =
+            true;
+
+
+        mesh.frustumCulled =
+            false;
+
+
+        scene.add(
+            mesh
+        );
+
+    }
+
 }
 
-function updateFringeGeometry() {
-    if (!fringeGeometry || !fringePositions || !geometry) return;
 
-    const topArray = geometry.attributes.position.array;
-    const normalArray = geometry.attributes.normal.array;
-    const out = fringePositions.array;
+// ==========================================================
+// UPDATE SIDE SELVAGE / FRAY
+// ==========================================================
 
-    for (let s = 0; s < fringeSpecs.length; s++) {
-        const spec = fringeSpecs[s];
-        const src = spec.sourceIndex * 3;
-        const dst = s * 12;
+function updateSideFrayGeometry() {
 
-        const tx = topArray[src];
-        const ty = topArray[src + 1];
-        const tz = topArray[src + 2];
+    updateSideBandGeometry();
 
-        const nx = normalArray[src];
-        const ny = normalArray[src + 1];
-        const nz = normalArray[src + 2];
+    updateSideFiberGeometry();
 
-        const halfBase = spec.width * 0.48;
-        const halfTip = spec.width * 0.18;
+}
 
-        const tangentShiftX = spec.tangentX * spec.sidewaysOffset;
-        const tangentShiftY = spec.tangentY * spec.sidewaysOffset;
 
-        const baseCenterX =
-            tx +
-            spec.outwardX * FRINGE_BASE_OUTSET +
-            tangentShiftX -
-            nx * FRINGE_BASE_SINK;
+// ==========================================================
+// UPDATE SIDE BANDS
+// ==========================================================
 
-        const baseCenterY =
-            ty +
-            spec.outwardY * FRINGE_BASE_OUTSET +
-            tangentShiftY -
-            ny * FRINGE_BASE_SINK;
+function updateSideBandGeometry() {
 
-        const baseCenterZ =
-            tz -
-            nz * FRINGE_BASE_SINK;
+    if (
 
-        const tipCenterX =
-            tx +
-            spec.outwardX * (FRINGE_BASE_OUTSET + spec.length) +
-            tangentShiftX * 0.4 -
-            nx * FRINGE_TIP_SINK;
+        !sideBandPositionsLeft ||
 
-        const tipCenterY =
-            ty +
-            spec.outwardY * (FRINGE_BASE_OUTSET + spec.length) +
-            tangentShiftY * 0.4 -
-            ny * FRINGE_TIP_SINK;
+        !sideBandPositionsRight
 
-        const tipCenterZ =
-            tz -
-            spec.length * FRINGE_TIP_DROOP -
-            nz * FRINGE_TIP_SINK;
+    ) {
 
-        // v0 = base left
-        out[dst + 0] = baseCenterX - spec.tangentX * halfBase;
-        out[dst + 1] = baseCenterY - spec.tangentY * halfBase;
-        out[dst + 2] = baseCenterZ;
+        return;
 
-        // v1 = base right
-        out[dst + 3] = baseCenterX + spec.tangentX * halfBase;
-        out[dst + 4] = baseCenterY + spec.tangentY * halfBase;
-        out[dst + 5] = baseCenterZ;
-
-        // v2 = tip left
-        out[dst + 6] = tipCenterX - spec.tangentX * halfTip;
-        out[dst + 7] = tipCenterY - spec.tangentY * halfTip;
-        out[dst + 8] = tipCenterZ;
-
-        // v3 = tip right
-        out[dst + 9] = tipCenterX + spec.tangentX * halfTip;
-        out[dst + 10] = tipCenterY + spec.tangentY * halfTip;
-        out[dst + 11] = tipCenterZ;
     }
 
-    fringePositions.needsUpdate = true;
-    fringeGeometry.computeVertexNormals();
+
+    const leftArray =
+        sideBandPositionsLeft.array;
+
+
+    const rightArray =
+        sideBandPositionsRight.array;
+
+
+    const temp =
+        new THREE.Vector3();
+
+
+    for (
+
+        let y = 0;
+
+        y < ROWS;
+
+        y++
+
+    ) {
+
+        const t =
+
+            y /
+
+            (
+                ROWS -
+                1
+            );
+
+
+        // ==================================================
+        // LEFT
+        // ==================================================
+
+        sampleSideEdgePosition(
+
+            -1,
+
+            t,
+
+            temp
+
+        );
+
+
+        let base =
+            y *
+            6;
+
+
+        // Slight overlap under the main rug hides seams.
+        leftArray[
+            base + 0
+        ] =
+
+            temp.x +
+
+            SIDE_BAND_OVERLAP;
+
+
+        leftArray[
+            base + 1
+        ] =
+            temp.y;
+
+
+        leftArray[
+            base + 2
+        ] =
+
+            temp.z -
+
+            SIDE_BAND_Z_SINK_INNER;
+
+
+        // Outer edge of woven selvage.
+        leftArray[
+            base + 3
+        ] =
+
+            temp.x -
+
+            SIDE_BAND_WIDTH;
+
+
+        leftArray[
+            base + 4
+        ] =
+            temp.y;
+
+
+        leftArray[
+            base + 5
+        ] =
+
+            temp.z -
+
+            SIDE_BAND_Z_SINK_OUTER;
+
+
+        // ==================================================
+        // RIGHT
+        // ==================================================
+
+        sampleSideEdgePosition(
+
+            1,
+
+            t,
+
+            temp
+
+        );
+
+
+        base =
+            y *
+            6;
+
+
+        rightArray[
+            base + 0
+        ] =
+
+            temp.x -
+
+            SIDE_BAND_OVERLAP;
+
+
+        rightArray[
+            base + 1
+        ] =
+            temp.y;
+
+
+        rightArray[
+            base + 2
+        ] =
+
+            temp.z -
+
+            SIDE_BAND_Z_SINK_INNER;
+
+
+        rightArray[
+            base + 3
+        ] =
+
+            temp.x +
+
+            SIDE_BAND_WIDTH;
+
+
+        rightArray[
+            base + 4
+        ] =
+            temp.y;
+
+
+        rightArray[
+            base + 5
+        ] =
+
+            temp.z -
+
+            SIDE_BAND_Z_SINK_OUTER;
+
+    }
+
+
+    sideBandPositionsLeft.needsUpdate =
+        true;
+
+
+    sideBandPositionsRight.needsUpdate =
+        true;
+
+
+    sideBandGeometryLeft.computeVertexNormals();
+
+    sideBandGeometryRight.computeVertexNormals();
+
+}
+
+
+// ==========================================================
+// UPDATE ONE SIDE OF FRAY
+// ==========================================================
+
+function updateOneSideFray(
+
+    sideSign,
+
+    specs,
+
+    bufferAttribute,
+
+    frayGeometry
+
+) {
+
+    const out =
+        bufferAttribute.array;
+
+
+    const basePos =
+        new THREE.Vector3();
+
+
+    for (
+
+        let i = 0;
+
+        i < specs.length;
+
+        i++
+
+    ) {
+
+        const spec =
+            specs[i];
+
+
+        sampleSideEdgePosition(
+
+            sideSign,
+
+            spec.t,
+
+            basePos
+
+        );
+
+
+        // Outer edge of the woven band.
+        const outerBandX =
+
+            basePos.x
+
+            +
+
+            sideSign *
+            SIDE_BAND_WIDTH;
+
+
+        const baseY =
+
+            basePos.y
+
+            +
+
+            spec.baseYOffset;
+
+
+        const baseZ =
+
+            basePos.z
+
+            -
+
+            SIDE_BAND_Z_SINK_OUTER
+
+            +
+
+            spec.zJitter *
+            0.35;
+
+
+        // Short irregular thread tip.
+        const tipX =
+
+            outerBandX
+
+            +
+
+            sideSign *
+            spec.length;
+
+
+        const tipY =
+
+            baseY
+
+            +
+
+            spec.tipYSway;
+
+
+        const tipZ =
+
+            baseZ
+
+            -
+
+            SIDE_FRAY_TIP_SINK
+
+            +
+
+            spec.zJitter;
+
+
+        const halfBaseWidth =
+
+            spec.width *
+            0.50;
+
+
+        const halfTipWidth =
+
+            spec.width *
+            0.16;
+
+
+        const dst =
+            i *
+            12;
+
+
+        // --------------------------------------------------
+        // BASE LOWER
+        // --------------------------------------------------
+
+        out[
+            dst + 0
+        ] =
+
+            outerBandX
+
+            -
+
+            sideSign *
+            SIDE_FRAY_BASE_OVERLAP;
+
+
+        out[
+            dst + 1
+        ] =
+
+            baseY
+
+            -
+
+            halfBaseWidth;
+
+
+        out[
+            dst + 2
+        ] =
+            baseZ;
+
+
+        // --------------------------------------------------
+        // BASE UPPER
+        // --------------------------------------------------
+
+        out[
+            dst + 3
+        ] =
+
+            outerBandX
+
+            -
+
+            sideSign *
+            SIDE_FRAY_BASE_OVERLAP;
+
+
+        out[
+            dst + 4
+        ] =
+
+            baseY
+
+            +
+
+            halfBaseWidth;
+
+
+        out[
+            dst + 5
+        ] =
+            baseZ;
+
+
+        // --------------------------------------------------
+        // TIP LOWER
+        // --------------------------------------------------
+
+        out[
+            dst + 6
+        ] =
+            tipX;
+
+
+        out[
+            dst + 7
+        ] =
+
+            tipY
+
+            -
+
+            halfTipWidth;
+
+
+        out[
+            dst + 8
+        ] =
+            tipZ;
+
+
+        // --------------------------------------------------
+        // TIP UPPER
+        // --------------------------------------------------
+
+        out[
+            dst + 9
+        ] =
+            tipX;
+
+
+        out[
+            dst + 10
+        ] =
+
+            tipY
+
+            +
+
+            halfTipWidth;
+
+
+        out[
+            dst + 11
+        ] =
+            tipZ;
+
+    }
+
+
+    bufferAttribute.needsUpdate =
+        true;
+
+
+    frayGeometry.computeVertexNormals();
+
+}
+
+
+// ==========================================================
+// UPDATE BOTH SIDES
+// ==========================================================
+
+function updateSideFiberGeometry() {
+
+    if (
+
+        !sideFrayPositionsLeft ||
+
+        !sideFrayPositionsRight
+
+    ) {
+
+        return;
+
+    }
+
+
+    updateOneSideFray(
+
+        -1,
+
+        leftFraySpecs,
+
+        sideFrayPositionsLeft,
+
+        sideFrayGeometryLeft
+
+    );
+
+
+    updateOneSideFray(
+
+        1,
+
+        rightFraySpecs,
+
+        sideFrayPositionsRight,
+
+        sideFrayGeometryRight
+
+    );
+
 }
 
 
@@ -1038,70 +4620,347 @@ function updateFringeGeometry() {
 // ==========================================================
 
 function updateGeometry() {
-    const speed01 = visualSpeed01;
 
-    const foldAmplitude = lerp(MIN_FOLD_AMPLITUDE, MAX_FOLD_AMPLITUDE, speed01) * interactionPresence;
-    const foldLength = lerp(MIN_FOLD_LENGTH, MAX_FOLD_LENGTH, speed01);
-    const foldWidth = lerp(MIN_FOLD_WIDTH, MAX_FOLD_WIDTH, speed01);
-    const dragAmount = lerp(MIN_DRAG_AMOUNT, MAX_DRAG_AMOUNT, speed01) * interactionPresence;
+    const speed01 =
+        visualSpeed01;
 
-    const halfWidth = RUG_WIDTH / 2;
-    const halfHeight = RUG_HEIGHT / 2;
 
-    for (let i = 0; i < positions.count; i++) {
-        const baseX = restX[i];
-        const baseY = restY[i];
+    const foldAmplitude =
 
-        let finalX = baseX;
-        let finalY = baseY;
-        let foldZ = 0;
+        lerp(
 
-        const edgeDistanceX = halfWidth - Math.abs(baseX);
-        const edgeDistanceY = halfHeight - Math.abs(baseY);
+            MIN_FOLD_AMPLITUDE,
 
-        // Fade folds before the true edge so the border stays clean.
-        const edgeFade = smoothstep01(
-            Math.min(edgeDistanceX / 0.45, edgeDistanceY / 0.45)
+            MAX_FOLD_AMPLITUDE,
+
+            speed01
+
+        )
+
+        *
+
+        interactionPresence;
+
+
+    const foldLength =
+
+        lerp(
+
+            MIN_FOLD_LENGTH,
+
+            MAX_FOLD_LENGTH,
+
+            speed01
+
         );
 
-        if (interactionPresence > 0.001) {
-            const dx = baseX - smoothPointerX;
-            const dy = baseY - smoothPointerY;
 
-            const along = dx * motionDirX + dy * motionDirY;
-            const across = -dx * motionDirY + dy * motionDirX;
+    const foldWidth =
+
+        lerp(
+
+            MIN_FOLD_WIDTH,
+
+            MAX_FOLD_WIDTH,
+
+            speed01
+
+        );
+
+
+    const dragAmount =
+
+        lerp(
+
+            MIN_DRAG_AMOUNT,
+
+            MAX_DRAG_AMOUNT,
+
+            speed01
+
+        )
+
+        *
+
+        interactionPresence;
+
+
+    const halfWidth =
+        RUG_WIDTH /
+        2;
+
+
+    const halfHeight =
+        RUG_HEIGHT /
+        2;
+
+
+    for (
+
+        let i = 0;
+
+        i < positions.count;
+
+        i++
+
+    ) {
+
+        const baseX =
+            restX[i];
+
+
+        const baseY =
+            restY[i];
+
+
+        let finalX =
+            baseX;
+
+
+        let finalY =
+            baseY;
+
+
+        let foldZ =
+            0;
+
+
+        const edgeDistanceX =
+
+            halfWidth -
+
+            Math.abs(
+                baseX
+            );
+
+
+        const edgeDistanceY =
+
+            halfHeight -
+
+            Math.abs(
+                baseY
+            );
+
+
+        // Keep the real outer edge calm.
+        const edgeFade =
+
+            smoothstep01(
+
+                Math.min(
+
+                    edgeDistanceX /
+                    0.45,
+
+                    edgeDistanceY /
+                    0.45
+
+                )
+
+            );
+
+
+        if (
+
+            interactionPresence >
+
+            0.001
+
+        ) {
+
+            const dx =
+
+                baseX -
+                smoothPointerX;
+
+
+            const dy =
+
+                baseY -
+                smoothPointerY;
+
+
+            const along =
+
+                dx *
+                motionDirX
+
+                +
+
+                dy *
+                motionDirY;
+
+
+            const across =
+
+                -dx *
+                motionDirY
+
+                +
+
+                dy *
+                motionDirX;
+
 
             const directionalLength =
+
                 along < 0
-                    ? foldLength * 1.25
-                    : foldLength * 0.78;
 
-            const envelope = Math.exp(-(
-                (along * along) / (2 * directionalLength * directionalLength) +
-                (across * across) / (2 * foldWidth * foldWidth)
-            ));
+                    ?
 
-            const fold1 = Math.sin(across * FOLD_FREQUENCY_1 + along * 0.75);
-            const fold2 = Math.sin(across * FOLD_FREQUENCY_2 - along * 1.35 + 0.85);
+                    foldLength *
+                    1.25
 
-            const combinedFold = fold1 * 0.68 + fold2 * 0.32;
+                    :
 
-            foldZ = combinedFold * foldAmplitude * envelope * edgeFade;
+                    foldLength *
+                    0.78;
 
-            const dragEnvelope = envelope * edgeFade;
 
-            finalX += motionDirX * dragAmount * dragEnvelope;
-            finalY += motionDirY * dragAmount * dragEnvelope;
+            const envelope =
+
+                Math.exp(
+
+                    -(
+
+                        (
+                            along *
+                            along
+                        )
+
+                        /
+
+                        (
+                            2 *
+                            directionalLength *
+                            directionalLength
+                        )
+
+                        +
+
+                        (
+                            across *
+                            across
+                        )
+
+                        /
+
+                        (
+                            2 *
+                            foldWidth *
+                            foldWidth
+                        )
+
+                    )
+
+                );
+
+
+            const fold1 =
+
+                Math.sin(
+
+                    across *
+                    FOLD_FREQUENCY_1
+
+                    +
+
+                    along *
+                    0.75
+
+                );
+
+
+            const fold2 =
+
+                Math.sin(
+
+                    across *
+                    FOLD_FREQUENCY_2
+
+                    -
+
+                    along *
+                    1.35
+
+                    +
+
+                    0.85
+
+                );
+
+
+            const combinedFold =
+
+                fold1 *
+                0.68
+
+                +
+
+                fold2 *
+                0.32;
+
+
+            foldZ =
+
+                combinedFold *
+                foldAmplitude *
+                envelope *
+                edgeFade;
+
+
+            const dragEnvelope =
+
+                envelope *
+                edgeFade;
+
+
+            finalX +=
+
+                motionDirX *
+                dragAmount *
+                dragEnvelope;
+
+
+            finalY +=
+
+                motionDirY *
+                dragAmount *
+                dragEnvelope;
+
         }
 
-        positions.setXYZ(i, finalX, finalY, restZ[i] + height[i] + foldZ);
+
+        positions.setXYZ(
+
+            i,
+
+            finalX,
+
+            finalY,
+
+            restZ[i] +
+            height[i] +
+            foldZ
+
+        );
+
     }
 
-    positions.needsUpdate = true;
+
+    positions.needsUpdate =
+        true;
+
 
     geometry.computeVertexNormals();
+
+
     updateDynamicOcclusion();
-    updateFringeGeometry();
+
+
+    updateSideFrayGeometry();
+
 }
 
 
@@ -1110,87 +4969,272 @@ function updateGeometry() {
 // ==========================================================
 
 async function createRug() {
-    const [silkMaps, normalMap] = await Promise.all([
-        createV10SilkMaps(),
-        loadTexture('./textures/rug_normal.png')
-    ]);
 
-    normalMap.colorSpace = THREE.NoColorSpace;
-    configureTexture(normalMap);
+    const [
+        silkMaps,
+        normalMap
+    ] =
+        await Promise.all([
 
-    geometry = new THREE.PlaneGeometry(
-        RUG_WIDTH,
-        RUG_HEIGHT,
-        SEGMENTS_X,
-        SEGMENTS_Y
+            createV10SilkMaps(),
+
+            loadTexture(
+                './textures/rug_normal.png'
+            )
+
+        ]);
+
+
+    normalMap.colorSpace =
+        THREE.NoColorSpace;
+
+
+    configureTexture(
+        normalMap
     );
 
-    const colorArray = new Float32Array(
-        geometry.attributes.position.count * 3
+
+    geometry =
+        new THREE.PlaneGeometry(
+
+            RUG_WIDTH,
+
+            RUG_HEIGHT,
+
+            SEGMENTS_X,
+
+            SEGMENTS_Y
+
+        );
+
+
+    const colorArray =
+        new Float32Array(
+
+            geometry
+                .attributes
+                .position
+                .count
+
+            *
+
+            3
+
+        );
+
+
+    colorArray.fill(
+        1.0
     );
 
-    colorArray.fill(1.0);
 
-    vertexColors = new THREE.BufferAttribute(colorArray, 3);
-    vertexColors.setUsage(THREE.DynamicDrawUsage);
-    geometry.setAttribute('color', vertexColors);
+    vertexColors =
+        new THREE.BufferAttribute(
 
-    const material = new THREE.MeshPhysicalMaterial({
-        map: silkMaps.colorTexture,
+            colorArray,
 
-        metalness: 1.0,
-        metalnessMap: silkMaps.metalnessTexture,
+            3
 
-        roughness: 1.0,
-        roughnessMap: silkMaps.roughnessTexture,
+        );
 
-        normalMap: normalMap,
-        normalScale: new THREE.Vector2(0.8, -0.8),
 
-        anisotropy: SILK_ANISOTROPY,
-        anisotropyRotation: SILK_ANISOTROPY_ROTATION,
+    vertexColors.setUsage(
+        THREE.DynamicDrawUsage
+    );
 
-        sheen: SILK_SHEEN,
-        sheenColor: new THREE.Color(0xd1a987),
-        sheenRoughness: SILK_SHEEN_ROUGHNESS,
 
-        specularIntensity: 0.58,
-        specularColor: new THREE.Color(0xffead2),
+    geometry.setAttribute(
 
-        clearcoat: 0,
-        envMapIntensity: ENVIRONMENT_INTENSITY,
+        'color',
 
-        vertexColors: true,
-        side: THREE.DoubleSide
-    });
+        vertexColors
 
-    material.shadowSide = THREE.DoubleSide;
+    );
 
-    rug = new THREE.Mesh(geometry, material);
-    rug.castShadow = true;
-    rug.receiveShadow = true;
-    rug.frustumCulled = false;
 
-    scene.add(rug);
+    // ------------------------------------------------------
+    // SILK MATERIAL
+    // ------------------------------------------------------
+
+    const material =
+        new THREE.MeshPhysicalMaterial({
+
+            map:
+                silkMaps.colorTexture,
+
+
+            metalness:
+                1.0,
+
+
+            metalnessMap:
+                silkMaps.metalnessTexture,
+
+
+            roughness:
+                1.0,
+
+
+            roughnessMap:
+                silkMaps.roughnessTexture,
+
+
+            normalMap:
+                normalMap,
+
+
+            normalScale:
+                new THREE.Vector2(
+                    0.8,
+                    -0.8
+                ),
+
+
+            anisotropy:
+                SILK_ANISOTROPY,
+
+
+            anisotropyRotation:
+                SILK_ANISOTROPY_ROTATION,
+
+
+            sheen:
+                SILK_SHEEN,
+
+
+            sheenColor:
+                new THREE.Color(
+                    0xd1a987
+                ),
+
+
+            sheenRoughness:
+                SILK_SHEEN_ROUGHNESS,
+
+
+            specularIntensity:
+                0.58,
+
+
+            specularColor:
+                new THREE.Color(
+                    0xffead2
+                ),
+
+
+            clearcoat:
+                0,
+
+
+            envMapIntensity:
+                ENVIRONMENT_INTENSITY,
+
+
+            vertexColors:
+                true,
+
+
+            side:
+                THREE.DoubleSide
+
+        });
+
+
+    material.shadowSide =
+        THREE.DoubleSide;
+
+
+    rug =
+        new THREE.Mesh(
+
+            geometry,
+
+            material
+
+        );
+
+
+    rug.castShadow =
+        true;
+
+
+    rug.receiveShadow =
+        true;
+
+
+    rug.frustumCulled =
+        false;
+
+
+    scene.add(
+        rug
+    );
+
+
+    // ------------------------------------------------------
+    // PHYSICS
+    // ------------------------------------------------------
 
     initializeClothPhysics();
-    createFringeMesh();
 
-    window.rug = rug;
-    window.rugMaterial = material;
-    window.porphyraMaps = silkMaps;
-    window.porphyraFringe = {
-        mesh: fringeMesh,
-        specs: fringeSpecs
+
+    // ------------------------------------------------------
+    // SIDE SELVAGE + FRAY
+    // ------------------------------------------------------
+
+    createSideFraySystem();
+
+
+    // ------------------------------------------------------
+    // DEBUG ACCESS
+    // ------------------------------------------------------
+
+    window.rug =
+        rug;
+
+
+    window.rugMaterial =
+        material;
+
+
+    window.porphyraMaps =
+        silkMaps;
+
+
+    window.porphyraSideFray = {
+
+        sideBandMeshLeft,
+
+        sideBandMeshRight,
+
+        sideFrayMeshLeft,
+
+        sideFrayMeshRight,
+
+        leftFraySpecs,
+
+        rightFraySpecs
+
     };
+
+
     window.porphyraLights = {
+
         warmAreaKey,
+
         shadowKey,
+
         coolFill,
+
         rimLight
+
     };
 
-    console.log('PORPHYRA Cloth v11.3 — FRAYED EDGES LOADED');
+
+    console.log(
+        'PORPHYRA Cloth v11.4 — SIDE SELVAGE FRAY LOADED'
+    );
+
 }
 
 
@@ -1199,22 +5243,89 @@ async function createRug() {
 // ==========================================================
 
 function fitCamera() {
-    camera.aspect = window.innerWidth / window.innerHeight;
+
+    camera.aspect =
+
+        window.innerWidth /
+
+        window.innerHeight;
+
+
     camera.updateProjectionMatrix();
 
-    const fov = THREE.MathUtils.degToRad(camera.fov);
+
+    const fov =
+
+        THREE.MathUtils.degToRad(
+            camera.fov
+        );
+
 
     const distanceForHeight =
-        (RUG_HEIGHT / 2) / Math.tan(fov / 2);
+
+        (
+            RUG_HEIGHT /
+            2
+        )
+
+        /
+
+        Math.tan(
+            fov /
+            2
+        );
+
 
     const distanceForWidth =
-        (RUG_WIDTH / 2) /
-        (Math.tan(fov / 2) * camera.aspect);
 
-    const distance = Math.max(distanceForHeight, distanceForWidth);
+        (
+            RUG_WIDTH /
+            2
+        )
 
-    camera.position.set(0, 0, distance * 1.12);
-    camera.lookAt(0, 0, 0);
+        /
+
+        (
+            Math.tan(
+                fov /
+                2
+            )
+
+            *
+
+            camera.aspect
+        );
+
+
+    const distance =
+
+        Math.max(
+
+            distanceForHeight,
+
+            distanceForWidth
+
+        );
+
+
+    camera.position.set(
+
+        0,
+
+        0,
+
+        distance *
+        1.12
+
+    );
+
+
+    camera.lookAt(
+        0,
+        0,
+        0
+    );
+
 }
 
 
@@ -1222,34 +5333,98 @@ function fitCamera() {
 // RESIZE
 // ==========================================================
 
-window.addEventListener('resize', () => {
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    fitCamera();
-});
+window.addEventListener(
+
+    'resize',
+
+    () => {
+
+        renderer.setPixelRatio(
+
+            Math.min(
+
+                window.devicePixelRatio,
+
+                2
+
+            )
+
+        );
+
+
+        renderer.setSize(
+
+            window.innerWidth,
+
+            window.innerHeight
+
+        );
+
+
+        fitCamera();
+
+    }
+
+);
 
 
 // ==========================================================
 // START
 // ==========================================================
 
-const loading = document.getElementById('loading');
-const errorBox = document.getElementById('error');
+const loading =
+
+    document.getElementById(
+        'loading'
+    );
+
+
+const errorBox =
+
+    document.getElementById(
+        'error'
+    );
+
 
 try {
+
     fitCamera();
+
+
     await createRug();
 
-    loading.classList.add('hidden');
 
-    console.log('PORPHYRA Cloth v11.3 loaded');
+    loading.classList.add(
+        'hidden'
+    );
+
+
+    console.log(
+        'PORPHYRA Cloth v11.4 loaded'
+    );
+
 }
-catch (error) {
-    console.error(error);
+catch (
+    error
+) {
 
-    loading.classList.add('hidden');
-    errorBox.style.display = 'block';
-    errorBox.textContent = error.message;
+    console.error(
+        error
+    );
+
+
+    loading.classList.add(
+        'hidden'
+    );
+
+
+    errorBox.style.display =
+        'block';
+
+
+    errorBox.textContent =
+        error.message;
+
 }
 
 
@@ -1257,30 +5432,89 @@ catch (error) {
 // ANIMATION
 // ==========================================================
 
-const clock = new THREE.Clock();
+const clock =
+    new THREE.Clock();
 
-renderer.setAnimationLoop(() => {
-    const frameTime = Math.min(clock.getDelta(), 0.05);
-    physicsAccumulator += frameTime;
 
-    let substeps = 0;
+renderer.setAnimationLoop(
 
-    while (
-        physicsAccumulator >= FIXED_TIMESTEP &&
-        substeps < MAX_SUBSTEPS
-    ) {
-        simulateCloth(FIXED_TIMESTEP);
-        physicsAccumulator -= FIXED_TIMESTEP;
-        substeps++;
+    () => {
+
+        const frameTime =
+
+            Math.min(
+
+                clock.getDelta(),
+
+                0.05
+
+            );
+
+
+        physicsAccumulator +=
+            frameTime;
+
+
+        let substeps =
+            0;
+
+
+        while (
+
+            physicsAccumulator >=
+                FIXED_TIMESTEP
+
+            &&
+
+            substeps <
+                MAX_SUBSTEPS
+
+        ) {
+
+            simulateCloth(
+                FIXED_TIMESTEP
+            );
+
+
+            physicsAccumulator -=
+                FIXED_TIMESTEP;
+
+
+            substeps++;
+
+        }
+
+
+        if (
+
+            substeps ===
+            MAX_SUBSTEPS
+
+        ) {
+
+            physicsAccumulator =
+                0;
+
+        }
+
+
+        if (
+            rug
+        ) {
+
+            updateGeometry();
+
+        }
+
+
+        renderer.render(
+
+            scene,
+
+            camera
+
+        );
+
     }
 
-    if (substeps === MAX_SUBSTEPS) {
-        physicsAccumulator = 0;
-    }
-
-    if (rug) {
-        updateGeometry();
-    }
-
-    renderer.render(scene, camera);
-});
+);
