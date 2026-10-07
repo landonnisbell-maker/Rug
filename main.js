@@ -1,208 +1,78 @@
 import * as THREE from 'three';
-
-import {
-    RoomEnvironment
-} from 'three/addons/environments/RoomEnvironment.js';
-
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 // ==========================================================
-// PORPHYRA
-// INTERACTIVE CLOTH — VERSION 8.5
-//
-// EXACT BLENDKIT COLORRAMP RECONSTRUCTION
-//
-// Preserves:
-// - Smooth cloth physics
-// - Ripple simulation
-// - Directional folds
-// - Lateral fabric bunching
-// - Responsive mouse interaction
-//
-// Exact Blender material:
-//
-// GREEN mask
-// -> multiplied into Base Color
-//
-// RED mask
-// -> Metallic ColorRamp
-//    black @ 0.340
-//    white @ 0.578
-//
-// BLUE mask
-// -> Roughness ColorRamp
-//    black @ 0.051
-//    white @ 0.763
-//
-// Normal:
-// Strength = 0.800
-// Y inverted
-// ==========================================================
-
-
-// ==========================================================
-// RUG
+// PORPHYRA — INTERACTIVE CLOTH v9
+// Anisotropic silk + controlled woven metallic response
 // ==========================================================
 
 const RUG_WIDTH = 9.4;
 const RUG_HEIGHT = 5.3;
-
 const SEGMENTS_X = 64;
 const SEGMENTS_Y = 36;
-
 const COLS = SEGMENTS_X + 1;
 const ROWS = SEGMENTS_Y + 1;
 
-
-// ==========================================================
-// TEXTURE SCALE
-// ==========================================================
-
 const REPEAT_Y = 1.6;
+const REPEAT_X = REPEAT_Y * (RUG_WIDTH / RUG_HEIGHT);
 
-const REPEAT_X =
-    REPEAT_Y *
-    (RUG_WIDTH / RUG_HEIGHT);
+// V9 material tuning
+const COLOR_MASK_STRENGTH = 0.42;
+const MAX_METALNESS = 0.14;
+const MIN_SILK_ROUGHNESS = 0.40;
+const MAX_SILK_ROUGHNESS = 0.72;
+const SILK_ANISOTROPY = 0.68;
+const SILK_ANISOTROPY_ROTATION = 0.0;
+const SILK_SHEEN = 0.82;
+const SILK_SHEEN_ROUGHNESS = 0.48;
 
-
-// ==========================================================
-// MAIN CLOTH PHYSICS
-// ==========================================================
-
+// Physics — unchanged from the working cloth version
 const TENSION = 0.26;
-
 const RESTORE_FORCE = 0.035;
-
 const DAMPING = 0.92;
-
-
-// ==========================================================
-// POINTER TRACKING
-// ==========================================================
-
 const POINTER_FOLLOW_SPEED = 38;
-
 const SPEED_SMOOTHING = 8;
-
 const DIRECTION_UPDATE_THRESHOLD = 0.28;
-
 const DIRECTION_FOLLOW_SPEED = 10;
-
-
-// ==========================================================
-// SPEED RESPONSE
-// ==========================================================
-
 const SPEED_DEADZONE = 0.12;
-
 const SPEED_FULL_EFFECT = 5.0;
-
-
-// ==========================================================
-// SLOW-MOUSE RESPONSE
-// ==========================================================
-
 const MIN_BULGE = 0.045;
-
 const MIN_RADIUS = 0.55;
-
 const MIN_POINTER_STIFFNESS = 0.070;
-
-
-// ==========================================================
-// FAST-MOUSE RESPONSE
-// ==========================================================
-
 const MAX_BULGE = 0.58;
-
 const MAX_RADIUS = 0.92;
-
 const MAX_POINTER_STIFFNESS = 0.17;
-
-
-// ==========================================================
-// LOCAL DAMPING
-// ==========================================================
-
 const SLOW_POINTER_DAMPING = 0.55;
-
 const FAST_POINTER_DAMPING = 0.16;
-
-
-// ==========================================================
-// CLOTH FOLDS
-// ==========================================================
-
 const MIN_FOLD_AMPLITUDE = 0.007;
-
 const MAX_FOLD_AMPLITUDE = 0.070;
-
 const MIN_FOLD_LENGTH = 0.80;
-
 const MAX_FOLD_LENGTH = 1.60;
-
 const MIN_FOLD_WIDTH = 0.42;
-
 const MAX_FOLD_WIDTH = 0.82;
-
 const FOLD_FREQUENCY_1 = 7.0;
-
 const FOLD_FREQUENCY_2 = 4.2;
-
-
-// ==========================================================
-// LATERAL FABRIC DRAG
-// ==========================================================
-
 const MIN_DRAG_AMOUNT = 0.002;
-
 const MAX_DRAG_AMOUNT = 0.060;
-
-
-// ==========================================================
-// FIXED PHYSICS TIMESTEP
-// ==========================================================
-
 const FIXED_TIMESTEP = 1 / 120;
-
 const MAX_SUBSTEPS = 5;
-
 let physicsAccumulator = 0;
 
+// Scene
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
 
-// ==========================================================
-// SCENE
-// ==========================================================
+const camera = new THREE.PerspectiveCamera(
+    32,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    100
+);
 
-const scene =
-    new THREE.Scene();
-
-scene.background =
-    new THREE.Color(0x000000);
-
-
-// ==========================================================
-// CAMERA
-// ==========================================================
-
-const camera =
-    new THREE.PerspectiveCamera(
-        32,
-        window.innerWidth /
-        window.innerHeight,
-        0.1,
-        100
-    );
-
-
-// ==========================================================
-// RENDERER
-// ==========================================================
-
-const renderer =
-    new THREE.WebGLRenderer({
-        antialias: true,
-        powerPreference: 'high-performance'
-    });
+const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: 'high-performance'
+});
 
 renderer.setPixelRatio(
     Math.min(
@@ -229,11 +99,7 @@ document.body.appendChild(
     renderer.domElement
 );
 
-
-// ==========================================================
-// ENVIRONMENT
-// ==========================================================
-
+// Environment
 const pmrem =
     new THREE.PMREMGenerator(
         renderer
@@ -252,14 +118,9 @@ scene.environment =
     environment.texture;
 
 room.dispose();
-
 pmrem.dispose();
 
-
-// ==========================================================
-// LIGHTING
-// ==========================================================
-
+// Current lighting
 const keyLight =
     new THREE.DirectionalLight(
         0xffdfbd,
@@ -275,7 +136,6 @@ keyLight.position.set(
 scene.add(
     keyLight
 );
-
 
 const fillLight =
     new THREE.DirectionalLight(
@@ -293,14 +153,9 @@ scene.add(
     fillLight
 );
 
-
-// ==========================================================
-// THREE.JS TEXTURE LOADING
-// ==========================================================
-
+// Texture helpers
 const textureLoader =
     new THREE.TextureLoader();
-
 
 async function loadTexture(path) {
 
@@ -309,7 +164,6 @@ async function loadTexture(path) {
     );
 
 }
-
 
 function configureTexture(texture) {
 
@@ -342,123 +196,6 @@ function configureTexture(texture) {
 
 }
 
-
-// ==========================================================
-// CLOTH DATA
-// ==========================================================
-
-let rug;
-
-let geometry;
-
-let positions;
-
-let height;
-
-let velocity;
-
-let acceleration;
-
-let restX;
-
-let restY;
-
-let restZ;
-
-
-// ==========================================================
-// HELPERS
-// ==========================================================
-
-function indexOf(x, y) {
-
-    return (
-        y * COLS +
-        x
-    );
-
-}
-
-
-function clamp01(value) {
-
-    return Math.max(
-        0,
-        Math.min(
-            1,
-            value
-        )
-    );
-
-}
-
-
-function lerp(a, b, t) {
-
-    return (
-        a +
-        (b - a) * t
-    );
-
-}
-
-
-function smoothstep01(t) {
-
-    t =
-        clamp01(t);
-
-    return (
-        t *
-        t *
-        (
-            3 -
-            2 * t
-        )
-    );
-
-}
-
-
-// ==========================================================
-// BLENDER LINEAR COLORRAMP
-// ==========================================================
-//
-// Blender ColorRamp interpolation is set to LINEAR.
-//
-// blackPosition:
-// input where result becomes 0
-//
-// whitePosition:
-// input where result becomes 1
-//
-// ==========================================================
-
-function linearRamp(
-    value,
-    blackPosition,
-    whitePosition
-) {
-
-    return clamp01(
-        (
-            value -
-            blackPosition
-        )
-        /
-        (
-            whitePosition -
-            blackPosition
-        )
-    );
-
-}
-
-
-// ==========================================================
-// SAFE HTML IMAGE LOADING
-// ==========================================================
-
 function loadHtmlImage(path) {
 
     return new Promise(
@@ -467,28 +204,15 @@ function loadHtmlImage(path) {
             const image =
                 new Image();
 
-
             image.onload =
-                () => {
-
-                    resolve(
-                        image
-                    );
-
-                };
-
+                () => resolve(image);
 
             image.onerror =
-                () => {
-
-                    reject(
-                        new Error(
-                            `Could not load ${path}`
-                        )
-                    );
-
-                };
-
+                () => reject(
+                    new Error(
+                        `Could not load ${path}`
+                    )
+                );
 
             image.src =
                 path;
@@ -498,16 +222,10 @@ function loadHtmlImage(path) {
 
 }
 
-
-// ==========================================================
-// COLOR-SPACE HELPERS
-// ==========================================================
-
 function srgbByteToLinear(byteValue) {
 
     const value =
         byteValue / 255;
-
 
     if (
         value <= 0.04045
@@ -518,7 +236,6 @@ function srgbByteToLinear(byteValue) {
         );
 
     }
-
 
     return Math.pow(
         (
@@ -531,76 +248,68 @@ function srgbByteToLinear(byteValue) {
 
 }
 
-
 function linearToSrgbByte(value) {
 
     value =
-        clamp01(value);
-
-
-    let srgb;
-
-
-    if (
-        value <= 0.0031308
-    ) {
-
-        srgb =
-            value * 12.92;
-
-    }
-    else {
-
-        srgb =
-            1.055 *
-            Math.pow(
-                value,
-                1 / 2.4
+        Math.max(
+            0,
+            Math.min(
+                1,
+                value
             )
-            -
-            0.055;
+        );
 
-    }
-
+    const srgb =
+        value <= 0.0031308
+            ? value * 12.92
+            : 1.055 *
+              Math.pow(
+                  value,
+                  1 / 2.4
+              )
+              -
+              0.055;
 
     return Math.round(
-        clamp01(srgb) *
+        Math.max(
+            0,
+            Math.min(
+                1,
+                srgb
+            )
+        )
+        *
         255
     );
 
 }
 
+function linearRamp(
+    value,
+    blackPosition,
+    whitePosition
+) {
 
-// ==========================================================
-// BUILD BLENDKIT MATERIAL MAPS — V8.5
-// ==========================================================
-//
-// BASE COLOR:
-//
-// Base image
-// -> linear color
-// -> Value × 1.300
-// -> multiply GREEN mask
-//
-//
-// METALLIC:
-//
-// RED channel
-//
-// 0.340 = black
-// 0.578 = white
-//
-//
-// ROUGHNESS:
-//
-// BLUE channel
-//
-// 0.051 = black
-// 0.763 = white
-//
-// ==========================================================
+    return Math.max(
+        0,
+        Math.min(
+            1,
+            (
+                value -
+                blackPosition
+            )
+            /
+            (
+                whitePosition -
+                blackPosition
+            )
+        )
+    );
 
-async function createBlendKitMapsFromFiles() {
+}
+
+// Build safer, more fabric-like maps
+async function createV9SilkMaps() {
 
     const [
         baseImage,
@@ -618,16 +327,13 @@ async function createBlendKitMapsFromFiles() {
 
         ]);
 
-
     const width =
         baseImage.naturalWidth ||
         baseImage.width;
 
-
     const height =
         baseImage.naturalHeight ||
         baseImage.height;
-
 
     if (
         !width ||
@@ -640,24 +346,16 @@ async function createBlendKitMapsFromFiles() {
 
     }
 
-
-    // ======================================================
-    // BASE IMAGE CANVAS
-    // ======================================================
-
     const baseCanvas =
         document.createElement(
             'canvas'
         );
 
-
     baseCanvas.width =
         width;
 
-
     baseCanvas.height =
         height;
-
 
     const baseContext =
         baseCanvas.getContext(
@@ -668,7 +366,6 @@ async function createBlendKitMapsFromFiles() {
             }
         );
 
-
     if (!baseContext) {
 
         throw new Error(
@@ -676,7 +373,6 @@ async function createBlendKitMapsFromFiles() {
         );
 
     }
-
 
     baseContext.drawImage(
         baseImage,
@@ -686,8 +382,7 @@ async function createBlendKitMapsFromFiles() {
         height
     );
 
-
-    const baseImageData =
+    const baseData =
         baseContext.getImageData(
             0,
             0,
@@ -695,24 +390,16 @@ async function createBlendKitMapsFromFiles() {
             height
         );
 
-
-    // ======================================================
-    // MASK CANVAS
-    // ======================================================
-
     const maskCanvas =
         document.createElement(
             'canvas'
         );
 
-
     maskCanvas.width =
         width;
 
-
     maskCanvas.height =
         height;
-
 
     const maskContext =
         maskCanvas.getContext(
@@ -723,15 +410,13 @@ async function createBlendKitMapsFromFiles() {
             }
         );
 
-
     if (!maskContext) {
 
         throw new Error(
-            'Could not create mask canvas.'
+            'Could not create packed-mask canvas.'
         );
 
     }
-
 
     maskContext.drawImage(
         maskImage,
@@ -741,8 +426,7 @@ async function createBlendKitMapsFromFiles() {
         height
     );
 
-
-    const maskImageData =
+    const maskData =
         maskContext.getImageData(
             0,
             0,
@@ -750,83 +434,64 @@ async function createBlendKitMapsFromFiles() {
             height
         );
 
-
-    // ======================================================
-    // OUTPUT CANVASES
-    // ======================================================
-
     const colorCanvas =
         document.createElement(
             'canvas'
         );
 
-
-    colorCanvas.width =
-        width;
-
-
-    colorCanvas.height =
-        height;
-
-
-    const metallicCanvas =
+    const metalCanvas =
         document.createElement(
             'canvas'
         );
 
-
-    metallicCanvas.width =
-        width;
-
-
-    metallicCanvas.height =
-        height;
-
-
-    const roughnessCanvas =
+    const roughCanvas =
         document.createElement(
             'canvas'
         );
 
+    for (
+        const canvas
+        of [
+            colorCanvas,
+            metalCanvas,
+            roughCanvas
+        ]
+    ) {
 
-    roughnessCanvas.width =
-        width;
+        canvas.width =
+            width;
 
+        canvas.height =
+            height;
 
-    roughnessCanvas.height =
-        height;
-
+    }
 
     const colorContext =
         colorCanvas.getContext(
             '2d'
         );
 
-
-    const metallicContext =
-        metallicCanvas.getContext(
+    const metalContext =
+        metalCanvas.getContext(
             '2d'
         );
 
-
-    const roughnessContext =
-        roughnessCanvas.getContext(
+    const roughContext =
+        roughCanvas.getContext(
             '2d'
         );
-
 
     if (
         !colorContext ||
-        !metallicContext ||
-        !roughnessContext
+        !metalContext ||
+        !roughContext
     ) {
 
         throw new Error(
-            'Could not create BlendKit output canvases.'
+            'Could not create v9 output canvases.'
         );
 
     }
-
 
     const colorOutput =
         colorContext.createImageData(
@@ -834,44 +499,32 @@ async function createBlendKitMapsFromFiles() {
             height
         );
 
-
-    const metallicOutput =
-        metallicContext.createImageData(
+    const metalOutput =
+        metalContext.createImageData(
             width,
             height
         );
 
-
-    const roughnessOutput =
-        roughnessContext.createImageData(
+    const roughOutput =
+        roughContext.createImageData(
             width,
             height
         );
-
 
     const basePixels =
-        baseImageData.data;
-
+        baseData.data;
 
     const maskPixels =
-        maskImageData.data;
-
+        maskData.data;
 
     const colorPixels =
         colorOutput.data;
 
+    const metalPixels =
+        metalOutput.data;
 
-    const metallicPixels =
-        metallicOutput.data;
-
-
-    const roughnessPixels =
-        roughnessOutput.data;
-
-
-    // ======================================================
-    // PROCESS PIXELS
-    // ======================================================
+    const roughPixels =
+        roughOutput.data;
 
     for (
         let i = 0;
@@ -879,188 +532,143 @@ async function createBlendKitMapsFromFiles() {
         i += 4
     ) {
 
-        // --------------------------------------------------
-        // PACKED MASK
-        // --------------------------------------------------
-
         const maskR =
             maskPixels[i] /
             255;
-
 
         const maskG =
             maskPixels[i + 1] /
             255;
 
-
         const maskB =
             maskPixels[i + 2] /
             255;
 
-
-        // --------------------------------------------------
-        // BASE COLOR
-        // --------------------------------------------------
+        // Soften Blender's dark GREEN multiply.
+        const greenModulation =
+            1.0 +
+            (
+                maskG -
+                1.0
+            )
+            *
+            COLOR_MASK_STRENGTH;
 
         let r =
             srgbByteToLinear(
                 basePixels[i]
             );
 
-
         let g =
             srgbByteToLinear(
                 basePixels[i + 1]
             );
-
 
         let b =
             srgbByteToLinear(
                 basePixels[i + 2]
             );
 
-
-        // Blender Hue/Saturation/Value node:
-        //
-        // Value = 1.300
-
+        // Original Blender Value = 1.3
         r *=
-            1.3;
-
+            1.3 *
+            greenModulation;
 
         g *=
-            1.3;
-
-
-        b *=
-            1.3;
-
-
-        // Blender Multiply node:
-        //
-        // Base Color × GREEN channel
-
-        r *=
-            maskG;
-
-
-        g *=
-            maskG;
-
+            1.3 *
+            greenModulation;
 
         b *=
-            maskG;
-
+            1.3 *
+            greenModulation;
 
         colorPixels[i] =
             linearToSrgbByte(
                 r
             );
 
-
         colorPixels[i + 1] =
             linearToSrgbByte(
                 g
             );
-
 
         colorPixels[i + 2] =
             linearToSrgbByte(
                 b
             );
 
-
         colorPixels[i + 3] =
             255;
 
-
-        // --------------------------------------------------
-        // EXACT BLENDER METALLIC RAMP
-        //
-        // RED channel
-        //
-        // BLACK @ 0.340
-        // WHITE @ 0.578
-        // LINEAR
-        // --------------------------------------------------
-
-        const metallic =
+        // Exact Blender red-channel classification,
+        // but compressed to a safe textile metalness.
+        const blenderMetal =
             linearRamp(
                 maskR,
                 0.340,
                 0.578
             );
 
+        const metalness =
+            blenderMetal *
+            MAX_METALNESS;
 
-        const metallicByte =
+        const metalByte =
             Math.round(
-                metallic *
+                metalness *
                 255
             );
 
+        metalPixels[i] =
+            metalByte;
 
-        metallicPixels[i] =
-            metallicByte;
+        metalPixels[i + 1] =
+            metalByte;
 
+        metalPixels[i + 2] =
+            metalByte;
 
-        metallicPixels[i + 1] =
-            metallicByte;
-
-
-        metallicPixels[i + 2] =
-            metallicByte;
-
-
-        metallicPixels[i + 3] =
+        metalPixels[i + 3] =
             255;
 
-
-        // --------------------------------------------------
-        // EXACT BLENDER ROUGHNESS RAMP
-        //
-        // BLUE channel
-        //
-        // BLACK @ 0.051
-        // WHITE @ 0.763
-        // LINEAR
-        // --------------------------------------------------
-
-        const roughness =
+        // Exact Blender blue-channel classification,
+        // remapped into a realistic silk roughness range.
+        const blenderRoughness =
             linearRamp(
                 maskB,
                 0.051,
                 0.763
             );
 
+        const roughness =
+            MIN_SILK_ROUGHNESS
+            +
+            (
+                MAX_SILK_ROUGHNESS -
+                MIN_SILK_ROUGHNESS
+            )
+            *
+            blenderRoughness;
 
-        const roughnessByte =
+        const roughByte =
             Math.round(
                 roughness *
                 255
             );
 
+        roughPixels[i] =
+            roughByte;
 
-        roughnessPixels[i] =
-            roughnessByte;
+        roughPixels[i + 1] =
+            roughByte;
 
+        roughPixels[i + 2] =
+            roughByte;
 
-        roughnessPixels[i + 1] =
-            roughnessByte;
-
-
-        roughnessPixels[i + 2] =
-            roughnessByte;
-
-
-        roughnessPixels[i + 3] =
+        roughPixels[i + 3] =
             255;
 
     }
-
-
-    // ======================================================
-    // WRITE GENERATED IMAGES
-    // ======================================================
 
     colorContext.putImageData(
         colorOutput,
@@ -1068,86 +676,122 @@ async function createBlendKitMapsFromFiles() {
         0
     );
 
-
-    metallicContext.putImageData(
-        metallicOutput,
+    metalContext.putImageData(
+        metalOutput,
         0,
         0
     );
 
-
-    roughnessContext.putImageData(
-        roughnessOutput,
+    roughContext.putImageData(
+        roughOutput,
         0,
         0
     );
-
-
-    // ======================================================
-    // CREATE THREE.JS TEXTURES
-    // ======================================================
 
     const colorTexture =
         new THREE.CanvasTexture(
             colorCanvas
         );
 
-
     colorTexture.colorSpace =
         THREE.SRGBColorSpace;
 
-
-    const metallicTexture =
+    const metalnessTexture =
         new THREE.CanvasTexture(
-            metallicCanvas
+            metalCanvas
         );
 
-
-    metallicTexture.colorSpace =
+    metalnessTexture.colorSpace =
         THREE.NoColorSpace;
-
 
     const roughnessTexture =
         new THREE.CanvasTexture(
-            roughnessCanvas
+            roughCanvas
         );
-
 
     roughnessTexture.colorSpace =
         THREE.NoColorSpace;
-
 
     configureTexture(
         colorTexture
     );
 
-
     configureTexture(
-        metallicTexture
+        metalnessTexture
     );
-
 
     configureTexture(
         roughnessTexture
     );
-
 
     return {
-
         colorTexture,
-
-        metallicTexture,
-
+        metalnessTexture,
         roughnessTexture
-
     };
 
 }
 
+// Cloth state
+let rug;
+let geometry;
+let positions;
+let height;
+let velocity;
+let acceleration;
+let restX;
+let restY;
+let restZ;
 
-// ==========================================================
-// RESTING CLOTH SHAPE
-// ==========================================================
+function indexOf(x, y) {
+
+    return (
+        y * COLS +
+        x
+    );
+
+}
+
+function clamp01(value) {
+
+    return Math.max(
+        0,
+        Math.min(
+            1,
+            value
+        )
+    );
+
+}
+
+function lerp(a, b, t) {
+
+    return (
+        a +
+        (
+            b - a
+        )
+        *
+        t
+    );
+
+}
+
+function smoothstep01(t) {
+
+    t =
+        clamp01(t);
+
+    return (
+        t *
+        t *
+        (
+            3 -
+            2 * t
+        )
+    );
+
+}
 
 function restingHeight(x, y) {
 
@@ -1155,22 +799,25 @@ function restingHeight(x, y) {
         Math.sin(
             x * 1.15 +
             y * 0.40
-        ) * 0.025;
-
+        )
+        *
+        0.025;
 
     const wave2 =
         Math.sin(
             x * 2.5 -
             y * 1.25
-        ) * 0.012;
-
+        )
+        *
+        0.012;
 
     const wave3 =
         Math.sin(
             y * 3.4 +
             x * 0.7
-        ) * 0.006;
-
+        )
+        *
+        0.006;
 
     return (
         wave1 +
@@ -1180,56 +827,43 @@ function restingHeight(x, y) {
 
 }
 
-
-// ==========================================================
-// INITIALIZE CLOTH PHYSICS
-// ==========================================================
-
 function initializeClothPhysics() {
 
     positions =
         geometry.attributes.position;
 
-
     const count =
         positions.count;
-
 
     height =
         new Float32Array(
             count
         );
 
-
     velocity =
         new Float32Array(
             count
         );
-
 
     acceleration =
         new Float32Array(
             count
         );
 
-
     restX =
         new Float32Array(
             count
         );
-
 
     restY =
         new Float32Array(
             count
         );
 
-
     restZ =
         new Float32Array(
             count
         );
-
 
     for (
         let i = 0;
@@ -1240,18 +874,8 @@ function initializeClothPhysics() {
         const x =
             positions.getX(i);
 
-
         const y =
             positions.getY(i);
-
-
-        restX[i] =
-            x;
-
-
-        restY[i] =
-            y;
-
 
         const z =
             restingHeight(
@@ -1259,10 +883,14 @@ function initializeClothPhysics() {
                 y
             );
 
+        restX[i] =
+            x;
+
+        restY[i] =
+            y;
 
         restZ[i] =
             z;
-
 
         positions.setZ(
             i,
@@ -1271,27 +899,19 @@ function initializeClothPhysics() {
 
     }
 
-
     positions.needsUpdate =
         true;
-
 
     geometry.computeVertexNormals();
 
 }
 
-
-// ==========================================================
-// POINTER SYSTEM
-// ==========================================================
-
+// Pointer system
 const pointerNDC =
     new THREE.Vector2();
 
-
 const raycaster =
     new THREE.Raycaster();
-
 
 const interactionPlane =
     new THREE.Plane(
@@ -1303,73 +923,53 @@ const interactionPlane =
         0
     );
 
-
 const intersection =
     new THREE.Vector3();
-
 
 let pointerActive =
     false;
 
-
 let targetPointerX =
     0;
-
 
 let targetPointerY =
     0;
 
-
 let smoothPointerX =
     0;
-
 
 let smoothPointerY =
     0;
 
-
 let previousSmoothPointerX =
     0;
-
 
 let previousSmoothPointerY =
     0;
 
-
 let smoothPointerSpeed =
     0;
-
 
 let motionDirX =
     1;
 
-
 let motionDirY =
     0;
-
 
 let hasSmoothPointer =
     false;
 
-
 let interactionPresence =
     0;
 
-
 let visualSpeed01 =
     0;
-
-
-// ==========================================================
-// POINTER MOVE
-// ==========================================================
 
 function onPointerMove(event) {
 
     const rect =
         renderer.domElement
             .getBoundingClientRect();
-
 
     pointerNDC.x =
         (
@@ -1380,9 +980,10 @@ function onPointerMove(event) {
             /
             rect.width
         )
-        * 2
-        - 1;
-
+        *
+        2
+        -
+        1;
 
     pointerNDC.y =
         -(
@@ -1393,22 +994,22 @@ function onPointerMove(event) {
             /
             rect.height
         )
-        * 2
-        + 1;
-
+        *
+        2
+        +
+        1;
 
     raycaster.setFromCamera(
         pointerNDC,
         camera
     );
 
-
     const hit =
-        raycaster.ray.intersectPlane(
-            interactionPlane,
-            intersection
-        );
-
+        raycaster.ray
+            .intersectPlane(
+                interactionPlane,
+                intersection
+            );
 
     if (!hit) {
 
@@ -1419,22 +1020,18 @@ function onPointerMove(event) {
 
     }
 
-
     const inside =
         Math.abs(
             intersection.x
         )
         <=
         RUG_WIDTH / 2
-
         &&
-
         Math.abs(
             intersection.y
         )
         <=
         RUG_HEIGHT / 2;
-
 
     if (!inside) {
 
@@ -1445,80 +1042,60 @@ function onPointerMove(event) {
 
     }
 
-
     targetPointerX =
         intersection.x;
-
 
     targetPointerY =
         intersection.y;
 
-
-    if (!hasSmoothPointer) {
+    if (
+        !hasSmoothPointer
+    ) {
 
         smoothPointerX =
             targetPointerX;
 
-
         smoothPointerY =
             targetPointerY;
-
 
         previousSmoothPointerX =
             smoothPointerX;
 
-
         previousSmoothPointerY =
             smoothPointerY;
-
 
         hasSmoothPointer =
             true;
 
     }
 
-
     pointerActive =
         true;
 
 }
-
-
-// ==========================================================
-// POINTER LEAVE
-// ==========================================================
 
 function onPointerLeave() {
 
     pointerActive =
         false;
 
-
     hasSmoothPointer =
         false;
-
 
     smoothPointerSpeed =
         0;
 
 }
 
-
 renderer.domElement.addEventListener(
     'pointermove',
     onPointerMove
 );
 
-
 renderer.domElement.addEventListener(
     'pointerleave',
     onPointerLeave
 );
-
-
-// ==========================================================
-// SMOOTH POINTER
-// ==========================================================
 
 function updateSmoothPointer(dt) {
 
@@ -1527,13 +1104,12 @@ function updateSmoothPointer(dt) {
             ? 1
             : 0;
 
-
     const presenceFollow =
         1 -
         Math.exp(
-            -10 * dt
+            -10 *
+            dt
         );
-
 
     interactionPresence +=
         (
@@ -1543,25 +1119,25 @@ function updateSmoothPointer(dt) {
         *
         presenceFollow;
 
-
-    if (!pointerActive) {
+    if (
+        !pointerActive
+    ) {
 
         smoothPointerSpeed *=
             Math.exp(
-                -10 * dt
+                -10 *
+                dt
             );
-
 
         visualSpeed01 *=
             Math.exp(
-                -7 * dt
+                -7 *
+                dt
             );
-
 
         return;
 
     }
-
 
     const follow =
         1 -
@@ -1569,7 +1145,6 @@ function updateSmoothPointer(dt) {
             -POINTER_FOLLOW_SPEED *
             dt
         );
-
 
     smoothPointerX +=
         (
@@ -1579,7 +1154,6 @@ function updateSmoothPointer(dt) {
         *
         follow;
 
-
     smoothPointerY +=
         (
             targetPointerY -
@@ -1588,16 +1162,13 @@ function updateSmoothPointer(dt) {
         *
         follow;
 
-
     const dx =
         smoothPointerX -
         previousSmoothPointerX;
 
-
     const dy =
         smoothPointerY -
         previousSmoothPointerY;
-
 
     const instantaneousVX =
         dx /
@@ -1606,14 +1177,12 @@ function updateSmoothPointer(dt) {
             0.0001
         );
 
-
     const instantaneousVY =
         dy /
         Math.max(
             dt,
             0.0001
         );
-
 
     const instantaneousSpeed =
         Math.sqrt(
@@ -1624,14 +1193,11 @@ function updateSmoothPointer(dt) {
             instantaneousVY
         );
 
-
     previousSmoothPointerX =
         smoothPointerX;
 
-
     previousSmoothPointerY =
         smoothPointerY;
-
 
     const speedFollow =
         1 -
@@ -1640,7 +1206,6 @@ function updateSmoothPointer(dt) {
             dt
         );
 
-
     smoothPointerSpeed +=
         (
             instantaneousSpeed -
@@ -1648,7 +1213,6 @@ function updateSmoothPointer(dt) {
         )
         *
         speedFollow;
-
 
     if (
         instantaneousSpeed >
@@ -1659,11 +1223,9 @@ function updateSmoothPointer(dt) {
             instantaneousVX /
             instantaneousSpeed;
 
-
         const targetDirY =
             instantaneousVY /
             instantaneousSpeed;
-
 
         const directionFollow =
             1 -
@@ -1671,7 +1233,6 @@ function updateSmoothPointer(dt) {
                 -DIRECTION_FOLLOW_SPEED *
                 dt
             );
-
 
         motionDirX +=
             (
@@ -1681,7 +1242,6 @@ function updateSmoothPointer(dt) {
             *
             directionFollow;
 
-
         motionDirY +=
             (
                 targetDirY -
@@ -1689,7 +1249,6 @@ function updateSmoothPointer(dt) {
             )
             *
             directionFollow;
-
 
         const directionLength =
             Math.sqrt(
@@ -1700,7 +1259,6 @@ function updateSmoothPointer(dt) {
                 motionDirY
             );
 
-
         if (
             directionLength >
             0.0001
@@ -1708,7 +1266,6 @@ function updateSmoothPointer(dt) {
 
             motionDirX /=
                 directionLength;
-
 
             motionDirY /=
                 directionLength;
@@ -1718,11 +1275,6 @@ function updateSmoothPointer(dt) {
     }
 
 }
-
-
-// ==========================================================
-// SPEED → INTERACTION
-// ==========================================================
 
 function getPointerEffect() {
 
@@ -1737,12 +1289,10 @@ function getPointerEffect() {
             SPEED_DEADZONE
         );
 
-
     let speed01 =
         smoothstep01(
             normalizedSpeed
         );
-
 
     speed01 =
         Math.pow(
@@ -1750,63 +1300,44 @@ function getPointerEffect() {
             1.35
         );
 
-
     visualSpeed01 =
         speed01;
-
-
-    const bulge =
-        lerp(
-            MIN_BULGE,
-            MAX_BULGE,
-            speed01
-        );
-
-
-    const radius =
-        lerp(
-            MIN_RADIUS,
-            MAX_RADIUS,
-            speed01
-        );
-
-
-    const stiffness =
-        lerp(
-            MIN_POINTER_STIFFNESS,
-            MAX_POINTER_STIFFNESS,
-            speed01
-        );
-
-
-    const localDamping =
-        lerp(
-            SLOW_POINTER_DAMPING,
-            FAST_POINTER_DAMPING,
-            speed01
-        );
-
 
     return {
 
         speed01,
 
-        bulge,
+        bulge:
+            lerp(
+                MIN_BULGE,
+                MAX_BULGE,
+                speed01
+            ),
 
-        radius,
+        radius:
+            lerp(
+                MIN_RADIUS,
+                MAX_RADIUS,
+                speed01
+            ),
 
-        stiffness,
+        stiffness:
+            lerp(
+                MIN_POINTER_STIFFNESS,
+                MAX_POINTER_STIFFNESS,
+                speed01
+            ),
 
-        localDamping
+        localDamping:
+            lerp(
+                SLOW_POINTER_DAMPING,
+                FAST_POINTER_DAMPING,
+                speed01
+            )
 
     };
 
 }
-
-
-// ==========================================================
-// CLOTH PHYSICS
-// ==========================================================
 
 function simulateCloth(dt) {
 
@@ -1814,20 +1345,14 @@ function simulateCloth(dt) {
         dt
     );
 
-
     acceleration.fill(
         0
     );
 
-
     const step =
         dt * 60;
 
-
-    // ------------------------------------------------------
-    // RIPPLE SPRINGS
-    // ------------------------------------------------------
-
+    // Neighbor springs / ripple
     for (
         let y = 1;
         y < ROWS - 1;
@@ -1846,13 +1371,11 @@ function simulateCloth(dt) {
                     y
                 );
 
-
             const left =
                 indexOf(
                     x - 1,
                     y
                 );
-
 
             const right =
                 indexOf(
@@ -1860,20 +1383,17 @@ function simulateCloth(dt) {
                     y
                 );
 
-
             const down =
                 indexOf(
                     x,
                     y - 1
                 );
 
-
             const up =
                 indexOf(
                     x,
                     y + 1
                 );
-
 
             const neighborAverage =
                 (
@@ -1885,7 +1405,6 @@ function simulateCloth(dt) {
                 *
                 0.25;
 
-
             acceleration[i] +=
                 (
                     neighborAverage -
@@ -1893,7 +1412,6 @@ function simulateCloth(dt) {
                 )
                 *
                 TENSION;
-
 
             acceleration[i] +=
                 -height[i] *
@@ -1903,11 +1421,7 @@ function simulateCloth(dt) {
 
     }
 
-
-    // ------------------------------------------------------
-    // POINTER FORCE
-    // ------------------------------------------------------
-
+    // Pointer force
     if (
         pointerActive &&
         hasSmoothPointer
@@ -1916,11 +1430,9 @@ function simulateCloth(dt) {
         const effect =
             getPointerEffect();
 
-
         const radiusSquared =
             effect.radius *
             effect.radius;
-
 
         for (
             let y = 1;
@@ -1940,21 +1452,20 @@ function simulateCloth(dt) {
                         y
                     );
 
-
                 const dx =
                     restX[i] -
                     smoothPointerX;
-
 
                 const dy =
                     restY[i] -
                     smoothPointerY;
 
-
                 const distanceSquared =
-                    dx * dx +
-                    dy * dy;
-
+                    dx *
+                    dx
+                    +
+                    dy *
+                    dy;
 
                 if (
                     distanceSquared <
@@ -1966,35 +1477,27 @@ function simulateCloth(dt) {
                             distanceSquared
                         );
 
-
                     let influence =
                         1 -
-                        (
-                            distance /
-                            effect.radius
-                        );
-
+                        distance /
+                        effect.radius;
 
                     influence =
                         smoothstep01(
                             influence
                         );
 
-
                     const targetHeight =
                         effect.bulge *
                         influence;
-
 
                     const error =
                         targetHeight -
                         height[i];
 
-
                     acceleration[i] +=
                         error *
                         effect.stiffness;
-
 
                     acceleration[i] -=
                         velocity[i] *
@@ -2009,17 +1512,12 @@ function simulateCloth(dt) {
 
     }
 
-
-    // ------------------------------------------------------
-    // INTEGRATE
-    // ------------------------------------------------------
-
+    // Integrate
     const frameDamping =
         Math.pow(
             DAMPING,
             step
         );
-
 
     for (
         let y = 1;
@@ -2039,15 +1537,12 @@ function simulateCloth(dt) {
                     y
                 );
 
-
             velocity[i] +=
                 acceleration[i] *
                 step;
 
-
             velocity[i] *=
                 frameDamping;
-
 
             height[i] +=
                 velocity[i] *
@@ -2057,11 +1552,7 @@ function simulateCloth(dt) {
 
     }
 
-
-    // ------------------------------------------------------
-    // PIN EDGES
-    // ------------------------------------------------------
-
+    // Pin edges
     for (
         let x = 0;
         x < COLS;
@@ -2074,31 +1565,25 @@ function simulateCloth(dt) {
                 0
             );
 
-
         const top =
             indexOf(
                 x,
                 ROWS - 1
             );
 
-
         height[bottom] =
             0;
-
 
         velocity[bottom] =
             0;
 
-
         height[top] =
             0;
-
 
         velocity[top] =
             0;
 
     }
-
 
     for (
         let y = 0;
@@ -2112,25 +1597,20 @@ function simulateCloth(dt) {
                 y
             );
 
-
         const right =
             indexOf(
                 COLS - 1,
                 y
             );
 
-
         height[left] =
             0;
-
 
         velocity[left] =
             0;
 
-
         height[right] =
             0;
-
 
         velocity[right] =
             0;
@@ -2139,16 +1619,10 @@ function simulateCloth(dt) {
 
 }
 
-
-// ==========================================================
-// UPDATE VISUAL CLOTH
-// ==========================================================
-
 function updateGeometry() {
 
     const speed01 =
         visualSpeed01;
-
 
     const foldAmplitude =
         lerp(
@@ -2159,7 +1633,6 @@ function updateGeometry() {
         *
         interactionPresence;
 
-
     const foldLength =
         lerp(
             MIN_FOLD_LENGTH,
@@ -2167,14 +1640,12 @@ function updateGeometry() {
             speed01
         );
 
-
     const foldWidth =
         lerp(
             MIN_FOLD_WIDTH,
             MAX_FOLD_WIDTH,
             speed01
         );
-
 
     const dragAmount =
         lerp(
@@ -2185,14 +1656,11 @@ function updateGeometry() {
         *
         interactionPresence;
 
-
     const halfWidth =
         RUG_WIDTH / 2;
 
-
     const halfHeight =
         RUG_HEIGHT / 2;
-
 
     for (
         let i = 0;
@@ -2203,22 +1671,17 @@ function updateGeometry() {
         const baseX =
             restX[i];
 
-
         const baseY =
             restY[i];
-
 
         let finalX =
             baseX;
 
-
         let finalY =
             baseY;
 
-
         let foldZ =
             0;
-
 
         const edgeDistanceX =
             halfWidth -
@@ -2226,13 +1689,11 @@ function updateGeometry() {
                 baseX
             );
 
-
         const edgeDistanceY =
             halfHeight -
             Math.abs(
                 baseY
             );
-
 
         const edgeFade =
             smoothstep01(
@@ -2245,7 +1706,6 @@ function updateGeometry() {
                 )
             );
 
-
         if (
             interactionPresence >
             0.001
@@ -2255,11 +1715,9 @@ function updateGeometry() {
                 baseX -
                 smoothPointerX;
 
-
             const dy =
                 baseY -
                 smoothPointerY;
-
 
             const along =
                 dx *
@@ -2268,7 +1726,6 @@ function updateGeometry() {
                 dy *
                 motionDirY;
 
-
             const across =
                 -dx *
                 motionDirY
@@ -2276,16 +1733,10 @@ function updateGeometry() {
                 dy *
                 motionDirX;
 
-
             const directionalLength =
                 along < 0
-
-                    ? foldLength *
-                    1.25
-
-                    : foldLength *
-                    0.78;
-
+                    ? foldLength * 1.25
+                    : foldLength * 0.78;
 
             const envelope =
                 Math.exp(
@@ -2300,9 +1751,7 @@ function updateGeometry() {
                             directionalLength *
                             directionalLength
                         )
-
                         +
-
                         (
                             across *
                             across
@@ -2316,46 +1765,32 @@ function updateGeometry() {
                     )
                 );
 
-
             const fold1 =
                 Math.sin(
                     across *
                     FOLD_FREQUENCY_1
-
                     +
-
                     along *
                     0.75
                 );
-
 
             const fold2 =
                 Math.sin(
                     across *
                     FOLD_FREQUENCY_2
-
                     -
-
                     along *
                     1.35
-
                     +
-
                     0.85
                 );
 
-
             const combinedFold =
-                (
-                    fold1 *
-                    0.68
-
-                    +
-
-                    fold2 *
-                    0.32
-                );
-
+                fold1 *
+                0.68
+                +
+                fold2 *
+                0.32;
 
             foldZ =
                 combinedFold *
@@ -2363,17 +1798,14 @@ function updateGeometry() {
                 envelope *
                 edgeFade;
 
-
             const dragEnvelope =
                 envelope *
                 edgeFade;
-
 
             finalX +=
                 motionDirX *
                 dragAmount *
                 dragEnvelope;
-
 
             finalY +=
                 motionDirY *
@@ -2382,14 +1814,10 @@ function updateGeometry() {
 
         }
 
-
         positions.setXYZ(
             i,
-
             finalX,
-
             finalY,
-
             restZ[i] +
             height[i] +
             foldZ
@@ -2397,29 +1825,22 @@ function updateGeometry() {
 
     }
 
-
     positions.needsUpdate =
         true;
-
 
     geometry.computeVertexNormals();
 
 }
 
-
-// ==========================================================
-// CREATE RUG — V8.5
-// ==========================================================
-
 async function createRug() {
 
     const [
-        maps,
-        normalTexture
+        silkMaps,
+        normalMap
     ] =
         await Promise.all([
 
-            createBlendKitMapsFromFiles(),
+            createV9SilkMaps(),
 
             loadTexture(
                 './textures/rug_normal.png'
@@ -2427,23 +1848,12 @@ async function createRug() {
 
         ]);
 
-
-    // ------------------------------------------------------
-    // NORMAL MAP
-    // ------------------------------------------------------
-
-    normalTexture.colorSpace =
+    normalMap.colorSpace =
         THREE.NoColorSpace;
 
-
     configureTexture(
-        normalTexture
+        normalMap
     );
-
-
-    // ------------------------------------------------------
-    // GEOMETRY
-    // ------------------------------------------------------
 
     geometry =
         new THREE.PlaneGeometry(
@@ -2453,77 +1863,74 @@ async function createRug() {
             SEGMENTS_Y
         );
 
-
-    // ------------------------------------------------------
-    // MATERIAL
-    // ------------------------------------------------------
-
     const material =
         new THREE.MeshPhysicalMaterial({
 
-            // Processed Blender-style color.
             map:
-                maps.colorTexture,
+                silkMaps.colorTexture,
 
-
-            // Metallic texture already contains the exact
-            // ColorRamp result.
+            // Controlled woven metallic detail
             metalness:
                 1.0,
 
-
             metalnessMap:
-                maps.metallicTexture,
+                silkMaps.metalnessTexture,
 
-
-            // Roughness texture already contains the exact
-            // ColorRamp result.
+            // Controlled silk roughness
             roughness:
                 1.0,
 
-
             roughnessMap:
-                maps.roughnessTexture,
+                silkMaps.roughnessTexture,
 
-
-            // Original normal texture.
+            // Original weave detail
             normalMap:
-                normalTexture,
+                normalMap,
 
-
-            // Blender Normal Map node:
-            // Strength = 0.800
-            //
-            // Y inverted to match the node graph.
             normalScale:
                 new THREE.Vector2(
                     0.8,
                     -0.8
                 ),
 
+            // V9 directional silk response
+            anisotropy:
+                SILK_ANISOTROPY,
 
-            // Save silk enhancements for checklist #2.
+            anisotropyRotation:
+                SILK_ANISOTROPY_ROTATION,
+
+            // Soft cloth sheen
             sheen:
-                0,
+                SILK_SHEEN,
 
+            sheenColor:
+                new THREE.Color(
+                    0xd1a987
+                ),
+
+            sheenRoughness:
+                SILK_SHEEN_ROUGHNESS,
+
+            // Warm non-metallic specular reflection
+            specularIntensity:
+                0.58,
+
+            specularColor:
+                new THREE.Color(
+                    0xffead2
+                ),
 
             clearcoat:
                 0,
 
-
             envMapIntensity:
-                0.75,
-
+                0.78,
 
             side:
                 THREE.DoubleSide
 
         });
-
-
-    // ------------------------------------------------------
-    // CREATE RUG
-    // ------------------------------------------------------
 
     rug =
         new THREE.Mesh(
@@ -2531,39 +1938,26 @@ async function createRug() {
             material
         );
 
-
     scene.add(
         rug
     );
 
-
-    // Preserve working cloth simulation.
     initializeClothPhysics();
 
-
-    // Debug access if needed later.
     window.rug =
         rug;
-
 
     window.rugMaterial =
         material;
 
-
     window.porphyraMaps =
-        maps;
-
+        silkMaps;
 
     console.log(
-        'PORPHYRA v8.5 — EXACT BLENDKIT RAMPS LOADED'
+        'PORPHYRA Cloth v9 — ANISOTROPIC SILK LOADED'
     );
 
 }
-
-
-// ==========================================================
-// CAMERA FIT
-// ==========================================================
 
 function fitCamera() {
 
@@ -2571,26 +1965,26 @@ function fitCamera() {
         window.innerWidth /
         window.innerHeight;
 
-
     camera.updateProjectionMatrix();
-
 
     const fov =
         THREE.MathUtils.degToRad(
             camera.fov
         );
 
-
     const distanceForHeight =
-        (RUG_HEIGHT / 2)
+        (
+            RUG_HEIGHT / 2
+        )
         /
         Math.tan(
             fov / 2
         );
 
-
     const distanceForWidth =
-        (RUG_WIDTH / 2)
+        (
+            RUG_WIDTH / 2
+        )
         /
         (
             Math.tan(
@@ -2600,20 +1994,17 @@ function fitCamera() {
             camera.aspect
         );
 
-
     const distance =
         Math.max(
             distanceForHeight,
             distanceForWidth
         );
 
-
     camera.position.set(
         0,
         0,
         distance * 1.12
     );
-
 
     camera.lookAt(
         0,
@@ -2622,11 +2013,6 @@ function fitCamera() {
     );
 
 }
-
-
-// ==========================================================
-// RESIZE
-// ==========================================================
 
 window.addEventListener(
     'resize',
@@ -2639,50 +2025,38 @@ window.addEventListener(
             )
         );
 
-
         renderer.setSize(
             window.innerWidth,
             window.innerHeight
         );
-
 
         fitCamera();
 
     }
 );
 
-
-// ==========================================================
-// START
-// ==========================================================
-
 const loading =
     document.getElementById(
         'loading'
     );
-
 
 const errorBox =
     document.getElementById(
         'error'
     );
 
-
 try {
 
     fitCamera();
 
-
     await createRug();
-
 
     loading.classList.add(
         'hidden'
     );
 
-
     console.log(
-        'PORPHYRA Cloth v8.5 loaded'
+        'PORPHYRA Cloth v9 loaded'
     );
 
 }
@@ -2692,29 +2066,20 @@ catch (error) {
         error
     );
 
-
     loading.classList.add(
         'hidden'
     );
 
-
     errorBox.style.display =
         'block';
-
 
     errorBox.textContent =
         error.message;
 
 }
 
-
-// ==========================================================
-// ANIMATION
-// ==========================================================
-
 const clock =
     new THREE.Clock();
-
 
 renderer.setAnimationLoop(
     () => {
@@ -2725,38 +2090,30 @@ renderer.setAnimationLoop(
                 0.05
             );
 
-
         physicsAccumulator +=
             frameTime;
-
 
         let substeps =
             0;
 
-
         while (
             physicsAccumulator >=
-                FIXED_TIMESTEP
-
+            FIXED_TIMESTEP
             &&
-
             substeps <
-                MAX_SUBSTEPS
+            MAX_SUBSTEPS
         ) {
 
             simulateCloth(
                 FIXED_TIMESTEP
             );
 
-
             physicsAccumulator -=
                 FIXED_TIMESTEP;
-
 
             substeps++;
 
         }
-
 
         if (
             substeps ===
@@ -2768,13 +2125,11 @@ renderer.setAnimationLoop(
 
         }
 
-
         if (rug) {
 
             updateGeometry();
 
         }
-
 
         renderer.render(
             scene,
