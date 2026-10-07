@@ -3,17 +3,19 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 
 // ==========================================================
-// PORPHYRA — INTERACTIVE CLOTH v13.0
-// PHYSICAL RUG EDGE PASS
+// PORPHYRA — INTERACTIVE CLOTH v13.1
+// PHYSICAL RUG EDGE + TOP/BOTTOM EDGE BREAKOUT
 //
-// Adds:
-// - integrated dark burgundy border on all four sides
-// - subtle inner border seam + darker outer edge
-// - microscopic raised perimeter ridge
-// - tiny deterministic perimeter irregularity
-// - low grazing light for static edge definition
+// v13.1 adds:
+// - extra vertical camera breathing room
+// - separate X/Y edge deformation falloff
+// - top/bottom silhouette breakout during interaction
 //
 // Keeps:
+// - integrated dark burgundy border
+// - raised woven perimeter profile
+// - subtle perimeter irregularity
+// - grazing edge lighting
 // - existing cloth physics
 // - cinematic lighting
 // - anisotropic silk shading
@@ -37,7 +39,29 @@ const ROWS = SEGMENTS_Y + 1;
 
 
 // ==========================================================
-// INTEGRATED BORDER — v13
+// v13.1 — EDGE BREAKOUT
+// ==========================================================
+
+// Left/right still retain a fairly broad protective fade.
+const EDGE_FADE_X = 0.42;
+
+// Top/bottom deformation is allowed much closer to the edge.
+const EDGE_FADE_Y = 0.22;
+
+// Maximum outward movement of the top/bottom silhouette.
+const TOP_BOTTOM_OVERSHOOT = 0.030;
+
+
+// ==========================================================
+// v13.1 — CAMERA PADDING
+// ==========================================================
+
+const CAMERA_PADDING_X = 1.04;
+const CAMERA_PADDING_Y = 1.10;
+
+
+// ==========================================================
+// INTEGRATED BORDER
 // ==========================================================
 
 const BORDER_WIDTH = 0.17;
@@ -50,20 +74,16 @@ const BORDER_OUTER_EDGE_COLOR = new THREE.Color(0x17090b);
 
 
 // ==========================================================
-// STATIC EDGE PROFILE — v13
+// STATIC EDGE PROFILE
 // ==========================================================
 
-// A tiny rolled/woven rise near the perimeter.
 const EDGE_RIDGE_HEIGHT = 0.022;
 const EDGE_RIDGE_CENTER = 0.072;
 const EDGE_RIDGE_SIGMA = 0.050;
 
-// Tiny downturn at the absolute cut edge.
 const EDGE_LIP_DROP = 0.0045;
 const EDGE_LIP_SIGMA = 0.026;
 
-// Small non-perfect outline so the rug never reads as a
-// mathematically perfect Photoshop rectangle.
 const EDGE_IRREGULARITY = 0.010;
 const EDGE_IRREGULARITY_FADE = 0.20;
 
@@ -500,16 +520,7 @@ scene.add(
 
 
 // ----------------------------------------------------------
-// v13 LOW GRAZING EDGE LIGHT
-//
-// This sits much lower than the other lights.
-//
-// Its main job is to make:
-// - the raised border profile
-// - the normal-map weave
-// - the resting perimeter
-//
-// visible even before the mouse moves.
+// LOW GRAZING EDGE LIGHT
 // ----------------------------------------------------------
 
 const edgeGraze =
@@ -1622,7 +1633,7 @@ function edgeDistanceForPoint(
 
 
 // ==========================================================
-// v13 STATIC EDGE PROFILE
+// STATIC EDGE PROFILE
 // ==========================================================
 
 function edgeProfileHeight(
@@ -1637,7 +1648,6 @@ function edgeProfileHeight(
         );
 
 
-    // Rounded woven ridge just inside the edge.
     const ridge =
 
         gaussian(
@@ -1655,7 +1665,6 @@ function edgeProfileHeight(
         EDGE_RIDGE_HEIGHT;
 
 
-    // Tiny downturn at the exact outer silhouette.
     const outerLip =
 
         gaussian(
@@ -1682,7 +1691,7 @@ function edgeProfileHeight(
 
 
 // ==========================================================
-// v13 SUBTLE PERIMETER IRREGULARITY
+// SUBTLE PERIMETER IRREGULARITY
 // ==========================================================
 
 function edgeIrregularity(
@@ -3083,7 +3092,12 @@ function simulateCloth(
 
 
     // ------------------------------------------------------
-    // PIN PERIMETER
+    // PIN PERIMETER HEIGHT
+    //
+    // Only Z motion is pinned here.
+    //
+    // v13.1 allows updateGeometry() to move the top/bottom
+    // silhouette slightly outward in X/Y space.
     // ------------------------------------------------------
 
     for (
@@ -3484,13 +3498,7 @@ function updateDynamicOcclusion() {
 
 
 // ==========================================================
-// v13 INTEGRATED BORDER SHADER
-//
-// This does NOT create another mesh.
-//
-// The border is literally part of the existing rug material.
-// That means it bends, folds and receives the exact same
-// lighting as the rug itself.
+// INTEGRATED BORDER SHADER
 // ==========================================================
 
 function installIntegratedBorder(
@@ -3707,7 +3715,7 @@ function installIntegratedBorder(
 
     material.customProgramCacheKey =
         () =>
-            'porphyra-v13-integrated-border';
+            'porphyra-v13-1-edge-breakout';
 
 }
 
@@ -3850,19 +3858,41 @@ function updateGeometry() {
             );
 
 
-        const edgeFade =
+        // --------------------------------------------------
+        // v13.1 — SEPARATE X/Y EDGE FADES
+        //
+        // Y uses a much shorter fade distance, allowing
+        // deformation to remain visible much closer to the
+        // top and bottom perimeter.
+        // --------------------------------------------------
+
+        const edgeFadeX =
 
             smoothstep01(
 
-                Math.min(
+                edgeDistanceX /
+                EDGE_FADE_X
 
-                    edgeDistanceX /
-                    0.45,
+            );
 
-                    edgeDistanceY /
-                    0.45
 
-                )
+        const edgeFadeY =
+
+            smoothstep01(
+
+                edgeDistanceY /
+                EDGE_FADE_Y
+
+            );
+
+
+        const edgeFade =
+
+            Math.min(
+
+                edgeFadeX,
+
+                edgeFadeY
 
             );
 
@@ -4033,6 +4063,52 @@ function updateGeometry() {
                 motionDirY *
                 dragAmount *
                 dragEnvelope;
+
+
+            // --------------------------------------------------
+            // v13.1 — TOP/BOTTOM SILHOUETTE BREAKOUT
+            //
+            // edgeFadeY approaches zero at the exact top/bottom
+            // perimeter.
+            //
+            // Therefore:
+            // 1 - edgeFadeY
+            //
+            // becomes strongest right at those edges.
+            //
+            // edgeFadeX prevents the effect from becoming weird
+            // at the four corners.
+            // --------------------------------------------------
+
+            const topBottomInfluence =
+
+                envelope *
+
+                edgeFadeX *
+
+                (
+                    1.0 -
+                    edgeFadeY
+                );
+
+
+            finalY +=
+
+                Math.sign(
+                    baseY
+                )
+
+                *
+
+                TOP_BOTTOM_OVERSHOOT
+
+                *
+
+                topBottomInfluence
+
+                *
+
+                interactionPresence;
 
         }
 
@@ -4251,7 +4327,7 @@ async function createRug() {
 
 
     // ------------------------------------------------------
-    // INTEGRATED v13 BORDER
+    // INTEGRATED BORDER
     // ------------------------------------------------------
 
     installIntegratedBorder(
@@ -4334,13 +4410,22 @@ async function createRug() {
             EDGE_RIDGE_CENTER,
 
         irregularity:
-            EDGE_IRREGULARITY
+            EDGE_IRREGULARITY,
+
+        edgeFadeX:
+            EDGE_FADE_X,
+
+        edgeFadeY:
+            EDGE_FADE_Y,
+
+        topBottomOvershoot:
+            TOP_BOTTOM_OVERSHOOT
 
     };
 
 
     console.log(
-        'PORPHYRA Cloth v13.0 — PHYSICAL RUG EDGE LOADED'
+        'PORPHYRA Cloth v13.1 — EDGE BREAKOUT LOADED'
     );
 
 }
@@ -4368,10 +4453,29 @@ function fitCamera() {
         );
 
 
+    // ------------------------------------------------------
+    // v13.1 — EXTRA CAMERA ROOM
+    //
+    // Slightly more room vertically gives the top/bottom
+    // silhouette somewhere to move without appearing clipped.
+    // ------------------------------------------------------
+
+    const paddedWidth =
+
+        RUG_WIDTH *
+        CAMERA_PADDING_X;
+
+
+    const paddedHeight =
+
+        RUG_HEIGHT *
+        CAMERA_PADDING_Y;
+
+
     const distanceForHeight =
 
         (
-            RUG_HEIGHT /
+            paddedHeight /
             2
         )
 
@@ -4386,7 +4490,7 @@ function fitCamera() {
     const distanceForWidth =
 
         (
-            RUG_WIDTH /
+            paddedWidth /
             2
         )
 
@@ -4422,7 +4526,7 @@ function fitCamera() {
         0,
 
         distance *
-        1.12
+        1.02
 
     );
 
@@ -4507,7 +4611,7 @@ try {
 
 
     console.log(
-        'PORPHYRA Cloth v13.0 loaded'
+        'PORPHYRA Cloth v13.1 loaded'
     );
 
 }
