@@ -7,65 +7,10 @@ import {
 
 // ==========================================================
 // PORPHYRA — SPEED-SENSITIVE SMOOTH CLOTH
-// VERSION 5
+// VERSION 6
 // ==========================================================
 
-const VERSION = 'v5';
-
-
-// ----------------------------------------------------------
-// VERSION INDICATOR
-// ----------------------------------------------------------
-//
-// Small visual confirmation that GitHub Pages has loaded
-// the newest main.js rather than a cached older version.
-// ----------------------------------------------------------
-
-const versionIndicator =
-    document.createElement('div');
-
-versionIndicator.textContent =
-    `PORPHYRA CLOTH • ${VERSION}`;
-
-versionIndicator.style.position =
-    'fixed';
-
-versionIndicator.style.top =
-    '12px';
-
-versionIndicator.style.left =
-    '14px';
-
-versionIndicator.style.zIndex =
-    '100';
-
-versionIndicator.style.color =
-    'rgba(255, 255, 255, 0.55)';
-
-versionIndicator.style.fontFamily =
-    'Arial, Helvetica, sans-serif';
-
-versionIndicator.style.fontSize =
-    '11px';
-
-versionIndicator.style.fontWeight =
-    '500';
-
-versionIndicator.style.letterSpacing =
-    '0.12em';
-
-versionIndicator.style.pointerEvents =
-    'none';
-
-versionIndicator.style.userSelect =
-    'none';
-
-versionIndicator.style.textShadow =
-    '0 1px 3px rgba(0, 0, 0, 0.8)';
-
-document.body.appendChild(
-    versionIndicator
-);
+const VERSION = 'v6';
 
 
 // ----------------------------------------------------------
@@ -107,9 +52,27 @@ const DAMPING = 0.92;
 // ----------------------------------------------------------
 // POINTER SMOOTHING
 // ----------------------------------------------------------
+//
+// v6 CHANGE:
+//
+// Was 18.
+//
+// 30 makes the invisible physics cursor stay much closer
+// to the real mouse while retaining enough interpolation
+// to prevent the old slow-movement jitter.
+// ----------------------------------------------------------
 
-const POINTER_FOLLOW_SPEED = 18;
+const POINTER_FOLLOW_SPEED = 30;
 
+
+// Keep speed smoothing slower.
+//
+// This means:
+//
+// position = responsive
+// effect strength = smooth
+//
+// That separation is important.
 const SPEED_SMOOTHING = 8;
 
 
@@ -117,16 +80,12 @@ const SPEED_SMOOTHING = 8;
 // SPEED-SENSITIVE CLOTH RESPONSE
 // ----------------------------------------------------------
 
-// Speed below this produces almost no dynamic effect.
 const SPEED_DEADZONE = 0.12;
 
-
-// Speed where the strongest effect is reached.
 const SPEED_FULL_EFFECT = 5.0;
 
 
-// Slow mouse:
-// gentle, subtle deformation.
+// Slow movement
 const MIN_BULGE = 0.045;
 
 const MIN_RADIUS = 0.55;
@@ -134,8 +93,7 @@ const MIN_RADIUS = 0.55;
 const MIN_POINTER_STIFFNESS = 0.055;
 
 
-// Fast mouse:
-// stronger, wider movement.
+// Fast movement
 const MAX_BULGE = 0.58;
 
 const MAX_RADIUS = 0.92;
@@ -147,7 +105,7 @@ const MAX_POINTER_STIFFNESS = 0.16;
 const SLOW_POINTER_DAMPING = 0.55;
 
 
-// Fast movement is freer to create waves.
+// Fast movement has more freedom to ripple.
 const FAST_POINTER_DAMPING = 0.16;
 
 
@@ -226,6 +184,69 @@ renderer.toneMappingExposure =
 
 document.body.appendChild(
     renderer.domElement
+);
+
+
+// ----------------------------------------------------------
+// VERSION INDICATOR
+//
+// Created AFTER the WebGL canvas and given a very high
+// z-index so it cannot disappear behind the renderer.
+// ----------------------------------------------------------
+
+const versionIndicator =
+    document.createElement('div');
+
+
+versionIndicator.textContent =
+    `PORPHYRA CLOTH  •  ${VERSION}`;
+
+
+Object.assign(
+    versionIndicator.style,
+    {
+        position: 'fixed',
+
+        top: '12px',
+        left: '12px',
+
+        zIndex: '999999',
+
+        padding: '7px 10px',
+
+        color: '#ffffff',
+
+        background:
+            'rgba(0, 0, 0, 0.72)',
+
+        border:
+            '1px solid rgba(255,255,255,0.22)',
+
+        borderRadius: '5px',
+
+        fontFamily:
+            'Arial, Helvetica, sans-serif',
+
+        fontSize: '11px',
+
+        fontWeight: '600',
+
+        letterSpacing: '0.12em',
+
+        lineHeight: '1',
+
+        pointerEvents: 'none',
+
+        userSelect: 'none',
+
+        boxShadow:
+            '0 2px 8px rgba(0,0,0,0.4)'
+    }
+);
+
+
+document.body.appendChild(
+    versionIndicator
 );
 
 
@@ -568,20 +589,19 @@ const intersection =
 let pointerActive = false;
 
 
-// Actual mouse target.
+// Real mouse position.
 let targetPointerX = 0;
 
 let targetPointerY = 0;
 
 
-// Smoothed physics cursor.
+// Physics interaction position.
 let smoothPointerX = 0;
 
 let smoothPointerY = 0;
 
 
-// Previous smoothed position used to measure true,
-// stable physics speed.
+// Used to calculate stable movement speed.
 let previousSmoothPointerX = 0;
 
 let previousSmoothPointerY = 0;
@@ -733,7 +753,7 @@ renderer.domElement.addEventListener(
 
 
 // ----------------------------------------------------------
-// SMOOTH POINTER + PHYSICS SPEED
+// SMOOTH POINTER
 // ----------------------------------------------------------
 
 function updateSmoothPointer(dt) {
@@ -749,6 +769,14 @@ function updateSmoothPointer(dt) {
 
     }
 
+
+    // ------------------------------------------------------
+    // POSITION FOLLOWING
+    //
+    // v6:
+    // Much faster than v5 so deformation stays closer
+    // to the visible cursor.
+    // ------------------------------------------------------
 
     const follow =
         1 -
@@ -773,6 +801,15 @@ function updateSmoothPointer(dt) {
         ) *
         follow;
 
+
+    // ------------------------------------------------------
+    // SPEED CALCULATION
+    //
+    // Still based on the smoothed physics cursor.
+    //
+    // This keeps the response calm even though the
+    // POSITION itself now follows faster.
+    // ------------------------------------------------------
 
     const dx =
         smoothPointerX -
@@ -822,7 +859,7 @@ function updateSmoothPointer(dt) {
 
 
 // ----------------------------------------------------------
-// CONVERT SPEED TO CLOTH EFFECT
+// SPEED → CLOTH RESPONSE
 // ----------------------------------------------------------
 
 function getPointerEffect() {
@@ -844,7 +881,7 @@ function getPointerEffect() {
         );
 
 
-    // Makes very slow motion even gentler.
+    // Keeps subtle mouse motion especially gentle.
     speed01 =
         Math.pow(
             speed01,
@@ -1069,11 +1106,13 @@ function simulateCloth(dt) {
                         height[i];
 
 
+                    // Pull cloth toward mouse-driven shape.
                     acceleration[i] +=
                         error *
                         effect.stiffness;
 
 
+                    // Absorb rapid oscillation under cursor.
                     acceleration[i] -=
                         velocity[i] *
                         effect.localDamping *
@@ -1089,7 +1128,7 @@ function simulateCloth(dt) {
 
 
     // ------------------------------------------------------
-    // INTEGRATE
+    // INTEGRATION
     // ------------------------------------------------------
 
     const frameDamping =
