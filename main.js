@@ -6,8 +6,66 @@ import {
 
 
 // ==========================================================
-// PORPHYRA — SMOOTH INTERACTIVE SPRING CLOTH
+// PORPHYRA — SPEED-SENSITIVE SMOOTH CLOTH
+// VERSION 5
 // ==========================================================
+
+const VERSION = 'v5';
+
+
+// ----------------------------------------------------------
+// VERSION INDICATOR
+// ----------------------------------------------------------
+//
+// Small visual confirmation that GitHub Pages has loaded
+// the newest main.js rather than a cached older version.
+// ----------------------------------------------------------
+
+const versionIndicator =
+    document.createElement('div');
+
+versionIndicator.textContent =
+    `PORPHYRA CLOTH • ${VERSION}`;
+
+versionIndicator.style.position =
+    'fixed';
+
+versionIndicator.style.top =
+    '12px';
+
+versionIndicator.style.left =
+    '14px';
+
+versionIndicator.style.zIndex =
+    '100';
+
+versionIndicator.style.color =
+    'rgba(255, 255, 255, 0.55)';
+
+versionIndicator.style.fontFamily =
+    'Arial, Helvetica, sans-serif';
+
+versionIndicator.style.fontSize =
+    '11px';
+
+versionIndicator.style.fontWeight =
+    '500';
+
+versionIndicator.style.letterSpacing =
+    '0.12em';
+
+versionIndicator.style.pointerEvents =
+    'none';
+
+versionIndicator.style.userSelect =
+    'none';
+
+versionIndicator.style.textShadow =
+    '0 1px 3px rgba(0, 0, 0, 0.8)';
+
+document.body.appendChild(
+    versionIndicator
+);
 
 
 // ----------------------------------------------------------
@@ -39,51 +97,62 @@ const REPEAT_X =
 // CLOTH PHYSICS
 // ----------------------------------------------------------
 
-// Overall fabric tension.
 const TENSION = 0.26;
 
-// Pull toward resting position.
 const RESTORE_FORCE = 0.035;
 
-// Overall motion damping.
-//
-// Slightly more damping than before,
-// but still enough bounce to feel like fabric.
-const DAMPING = 0.915;
+const DAMPING = 0.92;
 
 
 // ----------------------------------------------------------
-// CURSOR INTERACTION
+// POINTER SMOOTHING
 // ----------------------------------------------------------
 
-const POINTER_RADIUS = 0.80;
+const POINTER_FOLLOW_SPEED = 18;
 
-const POINTER_BULGE = 0.52;
+const SPEED_SMOOTHING = 8;
 
-// How strongly fabric follows the cursor.
-const POINTER_STIFFNESS = 0.14;
 
-// NEW:
-// Removes the repeated back-and-forth oscillation
-// directly underneath the mouse.
-const POINTER_DAMPING = 0.20;
+// ----------------------------------------------------------
+// SPEED-SENSITIVE CLOTH RESPONSE
+// ----------------------------------------------------------
 
-// NEW:
-// How quickly the invisible physics cursor catches
-// up with the real mouse.
-//
-// Higher = more immediate.
-// Lower = smoother / floatier.
-const POINTER_FOLLOW_SPEED = 22;
+// Speed below this produces almost no dynamic effect.
+const SPEED_DEADZONE = 0.12;
+
+
+// Speed where the strongest effect is reached.
+const SPEED_FULL_EFFECT = 5.0;
+
+
+// Slow mouse:
+// gentle, subtle deformation.
+const MIN_BULGE = 0.045;
+
+const MIN_RADIUS = 0.55;
+
+const MIN_POINTER_STIFFNESS = 0.055;
+
+
+// Fast mouse:
+// stronger, wider movement.
+const MAX_BULGE = 0.58;
+
+const MAX_RADIUS = 0.92;
+
+const MAX_POINTER_STIFFNESS = 0.16;
+
+
+// Slow movement gets strong damping.
+const SLOW_POINTER_DAMPING = 0.55;
+
+
+// Fast movement is freer to create waves.
+const FAST_POINTER_DAMPING = 0.16;
 
 
 // ----------------------------------------------------------
 // FIXED PHYSICS TIMESTEP
-//
-// This is a major stability improvement.
-//
-// Physics always runs at 120 updates/sec,
-// regardless of monitor refresh rate.
 // ----------------------------------------------------------
 
 const FIXED_TIMESTEP = 1 / 120;
@@ -97,7 +166,8 @@ let physicsAccumulator = 0;
 // SCENE
 // ----------------------------------------------------------
 
-const scene = new THREE.Scene();
+const scene =
+    new THREE.Scene();
 
 scene.background =
     new THREE.Color(0x000000);
@@ -187,7 +257,7 @@ pmrem.dispose();
 
 
 // ----------------------------------------------------------
-// LIGHTS
+// LIGHTING
 // ----------------------------------------------------------
 
 const keyLight =
@@ -278,7 +348,7 @@ function configureTexture(texture) {
 
 
 // ----------------------------------------------------------
-// CLOTH VARIABLES
+// CLOTH DATA
 // ----------------------------------------------------------
 
 let rug;
@@ -309,7 +379,53 @@ function indexOf(x, y) {
 
 
 // ----------------------------------------------------------
-// SUBTLE RESTING FABRIC SHAPE
+// HELPERS
+// ----------------------------------------------------------
+
+function clamp01(value) {
+
+    return Math.max(
+        0,
+        Math.min(
+            1,
+            value
+        )
+    );
+
+}
+
+
+function lerp(a, b, t) {
+
+    return (
+        a +
+        (
+            b - a
+        ) *
+        t
+    );
+
+}
+
+
+function smoothstep01(t) {
+
+    t = clamp01(t);
+
+    return (
+        t *
+        t *
+        (
+            3 -
+            2 * t
+        )
+    );
+
+}
+
+
+// ----------------------------------------------------------
+// RESTING CLOTH SHAPE
 // ----------------------------------------------------------
 
 function restingHeight(x, y) {
@@ -391,6 +507,7 @@ function initializeClothPhysics() {
 
 
         restX[i] = x;
+
         restY[i] = y;
 
 
@@ -451,36 +568,33 @@ const intersection =
 let pointerActive = false;
 
 
-// Raw browser pointer position.
+// Actual mouse target.
 let targetPointerX = 0;
+
 let targetPointerY = 0;
 
 
-// NEW:
-// Smoothed physics pointer.
+// Smoothed physics cursor.
 let smoothPointerX = 0;
+
 let smoothPointerY = 0;
 
 
-let targetPointerSpeed = 0;
+// Previous smoothed position used to measure true,
+// stable physics speed.
+let previousSmoothPointerX = 0;
+
+let previousSmoothPointerY = 0;
+
+
 let smoothPointerSpeed = 0;
 
 
-let previousPointerX = 0;
-let previousPointerY = 0;
-
-let previousPointerTime =
-    performance.now();
-
-let hasPreviousPointer =
-    false;
-
-let hasSmoothPointer =
-    false;
+let hasSmoothPointer = false;
 
 
 // ----------------------------------------------------------
-// POINTER MOVE
+// BROWSER POINTER MOVE
 // ----------------------------------------------------------
 
 function onPointerMove(event) {
@@ -533,13 +647,15 @@ function onPointerMove(event) {
 
 
     const inside =
-        Math.abs(intersection.x)
-            <= RUG_WIDTH / 2
+        Math.abs(
+            intersection.x
+        ) <= RUG_WIDTH / 2
 
         &&
 
-        Math.abs(intersection.y)
-            <= RUG_HEIGHT / 2;
+        Math.abs(
+            intersection.y
+        ) <= RUG_HEIGHT / 2;
 
 
     if (!inside) {
@@ -554,81 +670,33 @@ function onPointerMove(event) {
     targetPointerX =
         intersection.x;
 
+
     targetPointerY =
         intersection.y;
 
 
-    // Initialize smoothing immediately when the cursor
-    // first enters so it doesn't fly in from (0, 0).
     if (!hasSmoothPointer) {
 
         smoothPointerX =
             targetPointerX;
 
+
         smoothPointerY =
             targetPointerY;
+
+
+        previousSmoothPointerX =
+            smoothPointerX;
+
+
+        previousSmoothPointerY =
+            smoothPointerY;
+
 
         hasSmoothPointer =
             true;
 
     }
-
-
-    const now =
-        performance.now();
-
-
-    if (hasPreviousPointer) {
-
-        const dt =
-            Math.max(
-                (
-                    now -
-                    previousPointerTime
-                ) / 1000,
-
-                0.001
-            );
-
-
-        const dx =
-            targetPointerX -
-            previousPointerX;
-
-        const dy =
-            targetPointerY -
-            previousPointerY;
-
-
-        targetPointerSpeed =
-            Math.sqrt(
-                dx * dx +
-                dy * dy
-            ) / dt;
-
-
-        targetPointerSpeed =
-            Math.min(
-                targetPointerSpeed,
-                12
-            );
-
-    }
-
-
-    previousPointerX =
-        targetPointerX;
-
-    previousPointerY =
-        targetPointerY;
-
-
-    previousPointerTime =
-        now;
-
-
-    hasPreviousPointer =
-        true;
 
 
     pointerActive =
@@ -645,10 +713,8 @@ function onPointerLeave() {
 
     pointerActive = false;
 
-    hasPreviousPointer = false;
     hasSmoothPointer = false;
 
-    targetPointerSpeed = 0;
     smoothPointerSpeed = 0;
 
 }
@@ -667,17 +733,23 @@ renderer.domElement.addEventListener(
 
 
 // ----------------------------------------------------------
-// SMOOTH POINTER
+// SMOOTH POINTER + PHYSICS SPEED
 // ----------------------------------------------------------
 
 function updateSmoothPointer(dt) {
 
     if (!pointerActive) {
+
+        smoothPointerSpeed *=
+            Math.exp(
+                -10 * dt
+            );
+
         return;
+
     }
 
 
-    // Frame-rate-independent exponential smoothing.
     const follow =
         1 -
         Math.exp(
@@ -702,22 +774,123 @@ function updateSmoothPointer(dt) {
         follow;
 
 
-    // Speed is smoothed separately so tiny pointer-event
-    // fluctuations don't make the cloth pulse.
+    const dx =
+        smoothPointerX -
+        previousSmoothPointerX;
+
+
+    const dy =
+        smoothPointerY -
+        previousSmoothPointerY;
+
+
+    const instantaneousSpeed =
+        Math.sqrt(
+            dx * dx +
+            dy * dy
+        ) /
+        Math.max(
+            dt,
+            0.0001
+        );
+
+
+    previousSmoothPointerX =
+        smoothPointerX;
+
+
+    previousSmoothPointerY =
+        smoothPointerY;
+
+
     const speedFollow =
         1 -
         Math.exp(
-            -12 *
+            -SPEED_SMOOTHING *
             dt
         );
 
 
     smoothPointerSpeed +=
         (
-            targetPointerSpeed -
+            instantaneousSpeed -
             smoothPointerSpeed
         ) *
         speedFollow;
+
+}
+
+
+// ----------------------------------------------------------
+// CONVERT SPEED TO CLOTH EFFECT
+// ----------------------------------------------------------
+
+function getPointerEffect() {
+
+    const normalizedSpeed =
+        (
+            smoothPointerSpeed -
+            SPEED_DEADZONE
+        ) /
+        (
+            SPEED_FULL_EFFECT -
+            SPEED_DEADZONE
+        );
+
+
+    let speed01 =
+        smoothstep01(
+            normalizedSpeed
+        );
+
+
+    // Makes very slow motion even gentler.
+    speed01 =
+        Math.pow(
+            speed01,
+            1.35
+        );
+
+
+    const bulge =
+        lerp(
+            MIN_BULGE,
+            MAX_BULGE,
+            speed01
+        );
+
+
+    const radius =
+        lerp(
+            MIN_RADIUS,
+            MAX_RADIUS,
+            speed01
+        );
+
+
+    const stiffness =
+        lerp(
+            MIN_POINTER_STIFFNESS,
+            MAX_POINTER_STIFFNESS,
+            speed01
+        );
+
+
+    const localDamping =
+        lerp(
+            SLOW_POINTER_DAMPING,
+            FAST_POINTER_DAMPING,
+            speed01
+        );
+
+
+    return {
+        speed01,
+        bulge,
+        radius,
+        stiffness,
+        localDamping
+    };
 
 }
 
@@ -734,7 +907,6 @@ function simulateCloth(dt) {
     acceleration.fill(0);
 
 
-    // Convert fixed timestep to our old 60-FPS scale.
     const step =
         dt * 60;
 
@@ -817,24 +989,18 @@ function simulateCloth(dt) {
     // POINTER FORCE
     // ------------------------------------------------------
 
-    if (pointerActive) {
+    if (
+        pointerActive &&
+        hasSmoothPointer
+    ) {
+
+        const effect =
+            getPointerEffect();
+
 
         const radiusSquared =
-            POINTER_RADIUS *
-            POINTER_RADIUS;
-
-
-        const speedBoost =
-            Math.min(
-                smoothPointerSpeed *
-                0.020,
-                0.24
-            );
-
-
-        const bulge =
-            POINTER_BULGE +
-            speedBoost;
+            effect.radius *
+            effect.radius;
 
 
         for (
@@ -883,22 +1049,18 @@ function simulateCloth(dt) {
                         1 -
                         (
                             distance /
-                            POINTER_RADIUS
+                            effect.radius
                         );
 
 
-                    // Smoothstep
                     influence =
-                        influence *
-                        influence *
-                        (
-                            3 -
-                            2 * influence
+                        smoothstep01(
+                            influence
                         );
 
 
                     const targetHeight =
-                        bulge *
+                        effect.bulge *
                         influence;
 
 
@@ -907,18 +1069,14 @@ function simulateCloth(dt) {
                         height[i];
 
 
-                    // Spring toward cursor shape.
                     acceleration[i] +=
                         error *
-                        POINTER_STIFFNESS;
+                        effect.stiffness;
 
 
-                    // NEW:
-                    // Local velocity damping prevents the
-                    // cursor area from repeatedly overshooting.
                     acceleration[i] -=
                         velocity[i] *
-                        POINTER_DAMPING *
+                        effect.localDamping *
                         influence;
 
                 }
@@ -1036,7 +1194,7 @@ function simulateCloth(dt) {
 
 
 // ----------------------------------------------------------
-// UPDATE THREE.JS GEOMETRY
+// UPDATE GEOMETRY
 // ----------------------------------------------------------
 
 function updateGeometry() {
@@ -1308,6 +1466,11 @@ try {
         'hidden'
     );
 
+
+    console.log(
+        `PORPHYRA Cloth ${VERSION} loaded`
+    );
+
 } catch (error) {
 
     console.error(error);
@@ -1377,8 +1540,6 @@ renderer.setAnimationLoop(
         }
 
 
-        // Don't allow accumulated lag to explode
-        // after switching tabs, etc.
         if (
             substeps ===
             MAX_SUBSTEPS
