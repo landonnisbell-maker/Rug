@@ -7,15 +7,15 @@ import {
 
 // ==========================================================
 // PORPHYRA
-// INTERACTIVE CLOTH — VERSION 8
+// INTERACTIVE CLOTH — VERSION 8.2
 //
-// v8:
-// - Preserves v7 cloth physics and folding
-// - Reconstructs the original BlendKit material mask logic
-// - Green mask channel modulates base color
-// - Red mask channel drives metallic response
-// - Blue mask channel drives roughness response
-// - Restores Blender normal strength / Y inversion
+// RGB MASK CHANNEL DIAGNOSTIC
+//
+// LEFT THIRD   = RED channel
+// CENTER THIRD = GREEN channel
+// RIGHT THIRD  = BLUE channel
+//
+// Cloth physics/folding from v7 are preserved.
 // ==========================================================
 
 
@@ -167,8 +167,7 @@ scene.background =
 const camera =
     new THREE.PerspectiveCamera(
         32,
-        window.innerWidth /
-        window.innerHeight,
+        window.innerWidth / window.innerHeight,
         0.1,
         100
     );
@@ -238,6 +237,12 @@ pmrem.dispose();
 
 // ----------------------------------------------------------
 // LIGHTING
+//
+// These lights will NOT affect the diagnostic material,
+// because ShaderMaterial ignores them.
+//
+// They are left here so the rest of the project remains
+// unchanged.
 // ----------------------------------------------------------
 
 const keyLight =
@@ -416,17 +421,20 @@ function restingHeight(x, y) {
             y * 0.40
         ) * 0.025;
 
+
     const wave2 =
         Math.sin(
             x * 2.5 -
             y * 1.25
         ) * 0.012;
 
+
     const wave3 =
         Math.sin(
             y * 3.4 +
             x * 0.7
         ) * 0.006;
+
 
     return (
         wave1 +
@@ -446,8 +454,10 @@ function initializeClothPhysics() {
     positions =
         geometry.attributes.position;
 
+
     const count =
         positions.count;
+
 
     height =
         new Float32Array(count);
@@ -480,9 +490,11 @@ function initializeClothPhysics() {
         const y =
             positions.getY(i);
 
+
         restX[i] = x;
 
         restY[i] = y;
+
 
         const z =
             restingHeight(
@@ -490,7 +502,9 @@ function initializeClothPhysics() {
                 y
             );
 
+
         restZ[i] = z;
+
 
         positions.setZ(
             i,
@@ -502,6 +516,7 @@ function initializeClothPhysics() {
 
     positions.needsUpdate =
         true;
+
 
     geometry.computeVertexNormals();
 
@@ -515,8 +530,10 @@ function initializeClothPhysics() {
 const pointerNDC =
     new THREE.Vector2();
 
+
 const raycaster =
     new THREE.Raycaster();
+
 
 const interactionPlane =
     new THREE.Plane(
@@ -528,32 +545,46 @@ const interactionPlane =
         0
     );
 
+
 const intersection =
     new THREE.Vector3();
+
 
 let pointerActive =
     false;
 
+
+// Real browser cursor.
 let targetPointerX = 0;
 
 let targetPointerY = 0;
 
+
+// Smoothed physics cursor.
 let smoothPointerX = 0;
 
 let smoothPointerY = 0;
 
+
+// Previous smoothed cursor.
 let previousSmoothPointerX = 0;
 
 let previousSmoothPointerY = 0;
 
+
+// Smoothed speed.
 let smoothPointerSpeed = 0;
 
+
+// Smoothed direction.
 let motionDirX = 1;
 
 let motionDirY = 0;
 
+
 let hasSmoothPointer =
     false;
+
 
 let interactionPresence = 0;
 
@@ -649,6 +680,7 @@ function onPointerMove(event) {
     targetPointerX =
         intersection.x;
 
+
     targetPointerY =
         intersection.y;
 
@@ -658,14 +690,18 @@ function onPointerMove(event) {
         smoothPointerX =
             targetPointerX;
 
+
         smoothPointerY =
             targetPointerY;
+
 
         previousSmoothPointerX =
             smoothPointerX;
 
+
         previousSmoothPointerY =
             smoothPointerY;
+
 
         hasSmoothPointer =
             true;
@@ -688,8 +724,10 @@ function onPointerLeave() {
     pointerActive =
         false;
 
+
     hasSmoothPointer =
         false;
+
 
     smoothPointerSpeed =
         0;
@@ -744,15 +782,21 @@ function updateSmoothPointer(dt) {
                 -10 * dt
             );
 
+
         visualSpeed01 *=
             Math.exp(
                 -7 * dt
             );
 
+
         return;
 
     }
 
+
+    // ------------------------------------------------------
+    // POSITION
+    // ------------------------------------------------------
 
     const follow =
         1 -
@@ -779,6 +823,10 @@ function updateSmoothPointer(dt) {
         *
         follow;
 
+
+    // ------------------------------------------------------
+    // VELOCITY
+    // ------------------------------------------------------
 
     const dx =
         smoothPointerX -
@@ -821,9 +869,14 @@ function updateSmoothPointer(dt) {
     previousSmoothPointerX =
         smoothPointerX;
 
+
     previousSmoothPointerY =
         smoothPointerY;
 
+
+    // ------------------------------------------------------
+    // SPEED SMOOTHING
+    // ------------------------------------------------------
 
     const speedFollow =
         1 -
@@ -842,6 +895,10 @@ function updateSmoothPointer(dt) {
         speedFollow;
 
 
+    // ------------------------------------------------------
+    // DIRECTION SMOOTHING
+    // ------------------------------------------------------
+
     if (
         instantaneousSpeed >
         DIRECTION_UPDATE_THRESHOLD
@@ -850,6 +907,7 @@ function updateSmoothPointer(dt) {
         const targetDirX =
             instantaneousVX /
             instantaneousSpeed;
+
 
         const targetDirY =
             instantaneousVY /
@@ -901,6 +959,7 @@ function updateSmoothPointer(dt) {
 
             motionDirX /=
                 directionLength;
+
 
             motionDirY /=
                 directionLength;
@@ -1390,6 +1449,10 @@ function updateGeometry() {
             0;
 
 
+        // --------------------------------------------------
+        // EDGE FADE
+        // --------------------------------------------------
+
         const edgeDistanceX =
             halfWidth -
             Math.abs(baseX);
@@ -1427,6 +1490,10 @@ function updateGeometry() {
                 smoothPointerY;
 
 
+            // ------------------------------------------------
+            // ROTATE INTO CURSOR-MOTION SPACE
+            // ------------------------------------------------
+
             const along =
                 dx * motionDirX +
                 dy * motionDirY;
@@ -1442,6 +1509,10 @@ function updateGeometry() {
                     ? foldLength * 1.25
                     : foldLength * 0.78;
 
+
+            // ------------------------------------------------
+            // ELLIPTICAL FOLD REGION
+            // ------------------------------------------------
 
             const envelope =
                 Math.exp(
@@ -1473,6 +1544,10 @@ function updateGeometry() {
                 );
 
 
+            // ------------------------------------------------
+            // PRIMARY FOLDS
+            // ------------------------------------------------
+
             const fold1 =
                 Math.sin(
                     across *
@@ -1484,6 +1559,10 @@ function updateGeometry() {
                     0.75
                 );
 
+
+            // ------------------------------------------------
+            // SECONDARY FOLDS
+            // ------------------------------------------------
 
             const fold2 =
                 Math.sin(
@@ -1514,6 +1593,10 @@ function updateGeometry() {
                 envelope *
                 edgeFade;
 
+
+            // ------------------------------------------------
+            // LATERAL FABRIC DRAG
+            // ------------------------------------------------
 
             const dragEnvelope =
                 envelope *
@@ -1559,178 +1642,29 @@ function updateGeometry() {
 
 
 // ==========================================================
-// BLENDKIT FABRIC MATERIAL RECONSTRUCTION — V8
-// ==========================================================
-//
-// Actual Blender node behavior:
-//
-// BASE COLOR
-// Base texture
-// → HSV Value = 1.300
-// → Multiply by GREEN channel of packed mask
-//
-// METALLIC
-// RED mask channel
-// → ColorRamp
-// black = 0.000
-// white = 0.340
-//
-// ROUGHNESS
-// BLUE mask channel
-// → ColorRamp
-// black = 0.000
-// white = 0.051
-//
-// NORMAL
-// Y inverted
-// Strength = 0.800
-//
-// ==========================================================
-
-function applyBlendKitFabricShader(
-    material,
-    maskTexture
-) {
-
-    material.onBeforeCompile =
-        (shader) => {
-
-            shader.uniforms.blendkitMask = {
-                value: maskTexture
-            };
-
-
-            // Add the packed-mask sampler to the physical
-            // material fragment shader.
-
-            shader.fragmentShader =
-                shader.fragmentShader.replace(
-                    '#define STANDARD',
-
-                    `#define STANDARD
-uniform sampler2D blendkitMask;`
-                );
-
-
-            // --------------------------------------------------
-            // BASE COLOR
-            //
-            // Three.js samples the regular base-color texture.
-            // Then we apply the same extra operations Blender
-            // performs afterward.
-            // --------------------------------------------------
-
-            shader.fragmentShader =
-                shader.fragmentShader.replace(
-                    '#include <map_fragment>',
-
-                    `#include <map_fragment>
-
-vec4 blendkitBaseMaskSample =
-    texture2D(
-        blendkitMask,
-        vMapUv
-    );
-
-diffuseColor.rgb *=
-    1.3 *
-    blendkitBaseMaskSample.g;`
-                );
-
-
-            // --------------------------------------------------
-            // ROUGHNESS
-            //
-            // BLUE:
-            // 0.000 → 0
-            // 0.051 → 1
-            // --------------------------------------------------
-
-            shader.fragmentShader =
-                shader.fragmentShader.replace(
-                    '#include <roughnessmap_fragment>',
-
-                    `#include <roughnessmap_fragment>
-
-vec4 blendkitRoughnessMaskSample =
-    texture2D(
-        blendkitMask,
-        vMapUv
-    );
-
-roughnessFactor =
-    clamp(
-        blendkitRoughnessMaskSample.b /
-        0.051,
-        0.0,
-        1.0
-    );`
-                );
-
-
-            // --------------------------------------------------
-            // METALLIC
-            //
-            // RED:
-            // 0.000 → 0
-            // 0.340 → 1
-            // --------------------------------------------------
-
-            shader.fragmentShader =
-                shader.fragmentShader.replace(
-                    '#include <metalnessmap_fragment>',
-
-                    `#include <metalnessmap_fragment>
-
-vec4 blendkitMetalMaskSample =
-    texture2D(
-        blendkitMask,
-        vMapUv
-    );
-
-metalnessFactor =
-    clamp(
-        blendkitMetalMaskSample.r /
-        0.340,
-        0.0,
-        1.0
-    );`
-                );
-
-        };
-
-
-    material.customProgramCacheKey =
-        () =>
-            'porphyra-blendkit-fabric-v8';
-
-
-    material.needsUpdate =
-        true;
-
-}
-
-
-// ----------------------------------------------------------
 // CREATE RUG — V8.2 RGB CHANNEL DIAGNOSTIC
-// ----------------------------------------------------------
+// ==========================================================
 //
-// TEMPORARY TEST:
+// LEFT THIRD:
+// RED channel
 //
-// LEFT THIRD   = RED channel
-// CENTER THIRD = GREEN channel
-// RIGHT THIRD  = BLUE channel
+// CENTER THIRD:
+// GREEN channel
 //
-// Each channel is shown as pure grayscale:
+// RIGHT THIRD:
+// BLUE channel
 //
-// black = channel value 0
-// white = channel value 1
+// Each channel is displayed as grayscale.
 //
-// Lighting, tone mapping, normals, metallic, roughness,
-// and all other material effects are bypassed.
+// This completely bypasses:
+// - lighting
+// - ACES tone mapping
+// - roughness
+// - metallic
+// - normal mapping
+// - environment reflections
 //
-// Cloth physics remain fully functional.
-// ----------------------------------------------------------
+// ==========================================================
 
 async function createRug() {
 
@@ -1740,9 +1674,7 @@ async function createRug() {
         );
 
 
-    // This is raw DATA.
-    //
-    // Do NOT let Three.js treat it as an sRGB color image.
+    // Packed mask = mathematical data.
     maskTexture.colorSpace =
         THREE.NoColorSpace;
 
@@ -1766,7 +1698,7 @@ async function createRug() {
 
 
     // ------------------------------------------------------
-    // RAW CHANNEL SHADER
+    // RAW RGB CHANNEL SHADER
     // ------------------------------------------------------
 
     const material =
@@ -1776,6 +1708,15 @@ async function createRug() {
 
                 maskMap: {
                     value: maskTexture
+                },
+
+
+                textureRepeat: {
+                    value:
+                        new THREE.Vector2(
+                            REPEAT_X,
+                            REPEAT_Y
+                        )
                 }
 
             },
@@ -1806,15 +1747,27 @@ async function createRug() {
 
                 uniform sampler2D maskMap;
 
+                uniform vec2 textureRepeat;
+
                 varying vec2 vUv;
 
 
                 void main() {
 
+                    // --------------------------------------
+                    // Preserve the same texture tiling used
+                    // by the regular rug material.
+                    // --------------------------------------
+
+                    vec2 sampleUv =
+                        vUv *
+                        textureRepeat;
+
+
                     vec4 mask =
                         texture2D(
                             maskMap,
-                            vUv
+                            sampleUv
                         );
 
 
@@ -1863,6 +1816,10 @@ async function createRug() {
                     }
 
 
+                    // --------------------------------------
+                    // RAW GRAYSCALE OUTPUT
+                    // --------------------------------------
+
                     gl_FragColor =
                         vec4(
                             value,
@@ -1881,51 +1838,11 @@ async function createRug() {
 
 
             // CRITICAL:
-            //
-            // Do not run this through ACESFilm.
+            // Do not run diagnostic through ACES.
             toneMapped:
                 false
 
         });
-
-
-    // ------------------------------------------------------
-    // CREATE RUG
-    // ------------------------------------------------------
-
-    rug =
-        new THREE.Mesh(
-            geometry,
-            material
-        );
-
-
-    scene.add(
-        rug
-    );
-
-
-    // Keep all of v7's cloth movement.
-    initializeClothPhysics();
-
-
-    window.rug =
-        rug;
-
-
-    window.rugMaterial =
-        material;
-
-
-    window.rugMask =
-        maskTexture;
-
-
-    console.log(
-        'PORPHYRA v8.2 — RAW RGB CHANNEL TEST'
-    );
-
-}
 
 
     // ------------------------------------------------------
@@ -1944,7 +1861,7 @@ async function createRug() {
     );
 
 
-    // KEEP ALL EXISTING CLOTH PHYSICS.
+    // Keep ALL existing cloth physics.
     initializeClothPhysics();
 
 
@@ -1961,30 +1878,7 @@ async function createRug() {
 
 
     console.log(
-        'PORPHYRA v8.1 MASK DIAGNOSTIC ACTIVE'
-    );
-
-}
-
-
-    // Preserve v7 physics/folding behavior.
-    initializeClothPhysics();
-
-
-    window.rug =
-        rug;
-
-
-    window.rugMaterial =
-        material;
-
-
-    window.rugMask =
-        maskTexture;
-
-
-    console.log(
-        'PORPHYRA Cloth v8 — BlendKit material reconstruction loaded'
+        'PORPHYRA v8.2 — RAW RGB CHANNEL DIAGNOSTIC'
     );
 
 }
@@ -2111,7 +2005,7 @@ try {
 
 
     console.log(
-        'PORPHYRA Cloth v8 loaded'
+        'PORPHYRA Cloth v8.2 loaded'
     );
 
 }
