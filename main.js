@@ -2,104 +2,175 @@ import * as THREE from 'three';
 
 import {
     RoomEnvironment
-} from 'three/addons/environments/RoomEnvironment.js';
+} from './vendor/environments/RoomEnvironment.js?v=180';
 
 import {
     RectAreaLightUniformsLib
-} from 'three/addons/lights/RectAreaLightUniformsLib.js';
+} from './vendor/lights/RectAreaLightUniformsLib.js?v=180';
 
 
 // ==========================================================
-// PORPHYRA — INTERACTIVE CLOTH v14.2
-// WIX-SAFE DIRECT WEBGL BUILD
+// PORPHYRA — INTERACTIVE CLOTH v14.3
+// RELIABILITY BUILD
 //
-// v14.2:
+// Adds:
 //
-// - no preview image
-// - no loading overlay
-// - no opacity transition
-// - no .ready class
-// - no reveal handoff
-// - transparent background
-// - direct WebGL rendering
-// - production baked textures
+// - fully self-hosted Three.js
+// - waits for valid iframe dimensions
+// - ResizeObserver support
+// - texture timeout + automatic retries
+// - optional texture fallbacks
+// - shader pre-compilation
+// - verified first frame
+// - WebGL context-loss handling
+// - automatic recovery reload
+// - BFCache / Wix navigation recovery
 //
-// Keeps:
-//
-// - imperial purple + antique gold
-// - packed roughness/metalness map
-// - silk normal map
-// - physical border
-// - edge breakout
-// - cinematic lighting
-// - dynamic cloth physics
-// - dynamic fold occlusion
+// Keeps the v14.2 appearance and physics.
 // ==========================================================
+
+
+// ==========================================================
+// VERSION
+// ==========================================================
+
+const BUILD_VERSION =
+    '14.3';
 
 
 // ==========================================================
 // RUG
 // ==========================================================
 
-const RUG_WIDTH = 9.4;
-const RUG_HEIGHT = 5.3;
+const RUG_WIDTH =
+    9.4;
 
-const SEGMENTS_X = 64;
-const SEGMENTS_Y = 36;
 
-const COLS = SEGMENTS_X + 1;
-const ROWS = SEGMENTS_Y + 1;
+const RUG_HEIGHT =
+    5.3;
+
+
+const SEGMENTS_X =
+    64;
+
+
+const SEGMENTS_Y =
+    36;
+
+
+const COLS =
+    SEGMENTS_X +
+    1;
+
+
+const ROWS =
+    SEGMENTS_Y +
+    1;
 
 
 // ==========================================================
-// PRODUCTION TEXTURES
+// TEXTURES
 // ==========================================================
 
 const COLOR_TEXTURE_PATH =
-    './textures/porphyra_color.png?v=142';
+    './textures/porphyra_color.png?v=143';
+
 
 const MATERIAL_TEXTURE_PATH =
-    './textures/porphyra_material.png?v=142';
+    './textures/porphyra_material.png?v=143';
+
 
 const NORMAL_TEXTURE_PATH =
-    './textures/rug_normal.png?v=142';
+    './textures/rug_normal.png?v=143';
+
+
+// ==========================================================
+// RELIABILITY SETTINGS
+// ==========================================================
+
+const MIN_VIEWPORT_SIZE =
+    32;
+
+
+const VIEWPORT_WAIT_TIMEOUT =
+    10000;
+
+
+const TEXTURE_TIMEOUT =
+    10000;
+
+
+const TEXTURE_RETRIES =
+    3;
+
+
+const FIRST_FRAME_ATTEMPTS =
+    4;
+
+
+const MAX_RECOVERY_RELOADS =
+    2;
+
+
+const CONTEXT_RESTORE_TIMEOUT =
+    3500;
 
 
 // ==========================================================
 // EDGE BREAKOUT
 // ==========================================================
 
-const EDGE_FADE_X = 0.42;
-const EDGE_FADE_Y = 0.22;
+const EDGE_FADE_X =
+    0.42;
 
-const TOP_BOTTOM_OVERSHOOT = 0.030;
+
+const EDGE_FADE_Y =
+    0.22;
+
+
+const TOP_BOTTOM_OVERSHOOT =
+    0.030;
 
 
 // ==========================================================
-// CAMERA PADDING
+// CAMERA
 // ==========================================================
 
-const CAMERA_PADDING_X = 1.04;
-const CAMERA_PADDING_Y = 1.10;
+const CAMERA_PADDING_X =
+    1.04;
+
+
+const CAMERA_PADDING_Y =
+    1.10;
 
 
 // ==========================================================
 // BORDER
 // ==========================================================
 
-const BORDER_WIDTH = 0.17;
-const BORDER_FEATHER = 0.018;
-const BORDER_INNER_LINE_WIDTH = 0.022;
+const BORDER_WIDTH =
+    0.17;
+
+
+const BORDER_FEATHER =
+    0.018;
+
+
+const BORDER_INNER_LINE_WIDTH =
+    0.022;
+
 
 const BORDER_COLOR =
     new THREE.Color(
         0x271329
     );
 
+
 const BORDER_INNER_LINE_COLOR =
     new THREE.Color(
         0x593044
     );
+
 
 const BORDER_OUTER_EDGE_COLOR =
     new THREE.Color(
@@ -111,25 +182,48 @@ const BORDER_OUTER_EDGE_COLOR =
 // STATIC EDGE PROFILE
 // ==========================================================
 
-const EDGE_RIDGE_HEIGHT = 0.022;
-const EDGE_RIDGE_CENTER = 0.072;
-const EDGE_RIDGE_SIGMA = 0.050;
+const EDGE_RIDGE_HEIGHT =
+    0.022;
 
-const EDGE_LIP_DROP = 0.0045;
-const EDGE_LIP_SIGMA = 0.026;
 
-const EDGE_IRREGULARITY = 0.010;
-const EDGE_IRREGULARITY_FADE = 0.20;
+const EDGE_RIDGE_CENTER =
+    0.072;
+
+
+const EDGE_RIDGE_SIGMA =
+    0.050;
+
+
+const EDGE_LIP_DROP =
+    0.0045;
+
+
+const EDGE_LIP_SIGMA =
+    0.026;
+
+
+const EDGE_IRREGULARITY =
+    0.010;
+
+
+const EDGE_IRREGULARITY_FADE =
+    0.20;
 
 
 // ==========================================================
 // TEXTURE SCALE
 // ==========================================================
 
-const REPEAT_Y = 1.6;
+const REPEAT_Y =
+    1.6;
+
 
 const REPEAT_X =
-    REPEAT_Y *
+
+    REPEAT_Y
+
+    *
+
     (
         RUG_WIDTH /
         RUG_HEIGHT
@@ -140,94 +234,531 @@ const REPEAT_X =
 // SILK MATERIAL
 // ==========================================================
 
-const SILK_ANISOTROPY = 0.68;
-const SILK_ANISOTROPY_ROTATION = 0.0;
+const SILK_ANISOTROPY =
+    0.68;
 
-const SILK_SHEEN = 0.82;
-const SILK_SHEEN_ROUGHNESS = 0.48;
 
-const ENVIRONMENT_INTENSITY = 0.22;
+const SILK_ANISOTROPY_ROTATION =
+    0.0;
+
+
+const SILK_SHEEN =
+    0.82;
+
+
+const SILK_SHEEN_ROUGHNESS =
+    0.48;
+
+
+const ENVIRONMENT_INTENSITY =
+    0.22;
 
 
 // ==========================================================
 // DYNAMIC FOLD OCCLUSION
 // ==========================================================
 
-const VALLEY_DARKEN_STRENGTH = 0.28;
-const CREST_LIGHTEN_STRENGTH = 0.02;
+const VALLEY_DARKEN_STRENGTH =
+    0.28;
 
-const CURVATURE_START = 0.010;
-const CURVATURE_END = 0.060;
+
+const CREST_LIGHTEN_STRENGTH =
+    0.02;
+
+
+const CURVATURE_START =
+    0.010;
+
+
+const CURVATURE_END =
+    0.060;
 
 
 // ==========================================================
 // CLOTH PHYSICS
 // ==========================================================
 
-const TENSION = 0.26;
+const TENSION =
+    0.26;
 
-const RESTORE_FORCE = 0.035;
 
-const DAMPING = 0.92;
+const RESTORE_FORCE =
+    0.035;
 
-const POINTER_FOLLOW_SPEED = 38;
 
-const SPEED_SMOOTHING = 8;
+const DAMPING =
+    0.92;
 
-const DIRECTION_UPDATE_THRESHOLD = 0.28;
 
-const DIRECTION_FOLLOW_SPEED = 10;
+const POINTER_FOLLOW_SPEED =
+    38;
 
-const SPEED_DEADZONE = 0.12;
 
-const SPEED_FULL_EFFECT = 5.0;
+const SPEED_SMOOTHING =
+    8;
 
-const MIN_BULGE = 0.045;
 
-const MIN_RADIUS = 0.55;
+const DIRECTION_UPDATE_THRESHOLD =
+    0.28;
 
-const MIN_POINTER_STIFFNESS = 0.070;
 
-const MAX_BULGE = 0.58;
+const DIRECTION_FOLLOW_SPEED =
+    10;
 
-const MAX_RADIUS = 0.92;
 
-const MAX_POINTER_STIFFNESS = 0.17;
+const SPEED_DEADZONE =
+    0.12;
 
-const SLOW_POINTER_DAMPING = 0.55;
 
-const FAST_POINTER_DAMPING = 0.16;
+const SPEED_FULL_EFFECT =
+    5.0;
 
-const MIN_FOLD_AMPLITUDE = 0.007;
 
-const MAX_FOLD_AMPLITUDE = 0.070;
+const MIN_BULGE =
+    0.045;
 
-const MIN_FOLD_LENGTH = 0.80;
 
-const MAX_FOLD_LENGTH = 1.60;
+const MIN_RADIUS =
+    0.55;
 
-const MIN_FOLD_WIDTH = 0.42;
 
-const MAX_FOLD_WIDTH = 0.82;
+const MIN_POINTER_STIFFNESS =
+    0.070;
 
-const FOLD_FREQUENCY_1 = 7.0;
 
-const FOLD_FREQUENCY_2 = 4.2;
+const MAX_BULGE =
+    0.58;
 
-const MIN_DRAG_AMOUNT = 0.002;
 
-const MAX_DRAG_AMOUNT = 0.060;
+const MAX_RADIUS =
+    0.92;
+
+
+const MAX_POINTER_STIFFNESS =
+    0.17;
+
+
+const SLOW_POINTER_DAMPING =
+    0.55;
+
+
+const FAST_POINTER_DAMPING =
+    0.16;
+
+
+const MIN_FOLD_AMPLITUDE =
+    0.007;
+
+
+const MAX_FOLD_AMPLITUDE =
+    0.070;
+
+
+const MIN_FOLD_LENGTH =
+    0.80;
+
+
+const MAX_FOLD_LENGTH =
+    1.60;
+
+
+const MIN_FOLD_WIDTH =
+    0.42;
+
+
+const MAX_FOLD_WIDTH =
+    0.82;
+
+
+const FOLD_FREQUENCY_1 =
+    7.0;
+
+
+const FOLD_FREQUENCY_2 =
+    4.2;
+
+
+const MIN_DRAG_AMOUNT =
+    0.002;
+
+
+const MAX_DRAG_AMOUNT =
+    0.060;
 
 
 // ==========================================================
 // FIXED PHYSICS TIMESTEP
 // ==========================================================
 
-const FIXED_TIMESTEP = 1 / 120;
+const FIXED_TIMESTEP =
+    1 / 120;
 
-const MAX_SUBSTEPS = 5;
 
-let physicsAccumulator = 0;
+const MAX_SUBSTEPS =
+    5;
+
+
+let physicsAccumulator =
+    0;
+
+
+// ==========================================================
+// GENERAL STATE
+// ==========================================================
+
+const canvas =
+    document.getElementById(
+        'rugCanvas'
+    );
+
+
+let renderer =
+    null;
+
+
+let environmentTarget =
+    null;
+
+
+let animationRunning =
+    false;
+
+
+let firstFrameSuccessful =
+    false;
+
+
+let contextLost =
+    false;
+
+
+let contextRestoreTimer =
+    null;
+
+
+let resizeFrame =
+    null;
+
+
+// ==========================================================
+// CLOTH STATE
+// ==========================================================
+
+let rug =
+    null;
+
+
+let geometry =
+    null;
+
+
+let positions =
+    null;
+
+
+let vertexColors =
+    null;
+
+
+let height =
+    null;
+
+
+let velocity =
+    null;
+
+
+let acceleration =
+    null;
+
+
+let restX =
+    null;
+
+
+let restY =
+    null;
+
+
+let restZ =
+    null;
+
+
+// ==========================================================
+// BASIC HELPERS
+// ==========================================================
+
+function delay(
+    milliseconds
+) {
+
+    return new Promise(
+
+        resolve =>
+
+            window.setTimeout(
+                resolve,
+                milliseconds
+            )
+
+    );
+
+}
+
+
+function indexOf(
+    x,
+    y
+) {
+
+    return (
+
+        y *
+        COLS
+
+        +
+
+        x
+
+    );
+
+}
+
+
+function clamp01(
+    value
+) {
+
+    return Math.max(
+
+        0,
+
+        Math.min(
+            1,
+            value
+        )
+
+    );
+
+}
+
+
+function lerp(
+    a,
+    b,
+    t
+) {
+
+    return (
+
+        a
+
+        +
+
+        (
+            b -
+            a
+        )
+
+        *
+
+        t
+
+    );
+
+}
+
+
+function smoothstep01(
+    t
+) {
+
+    t =
+        clamp01(
+            t
+        );
+
+
+    return (
+
+        t *
+        t
+
+        *
+
+        (
+            3 -
+            2 * t
+        )
+
+    );
+
+}
+
+
+function gaussian(
+    value,
+    center,
+    sigma
+) {
+
+    const d =
+
+        (
+            value -
+            center
+        )
+
+        /
+
+        sigma;
+
+
+    return Math.exp(
+
+        -(d * d)
+
+    );
+
+}
+
+
+// ==========================================================
+// VIEWPORT SIZE
+// ==========================================================
+
+function getViewportSize() {
+
+    const root =
+        document.documentElement;
+
+
+    const body =
+        document.body;
+
+
+    const width =
+
+        Math.max(
+
+            canvas?.clientWidth || 0,
+
+            root?.clientWidth || 0,
+
+            body?.clientWidth || 0,
+
+            window.innerWidth || 0
+
+        );
+
+
+    const heightValue =
+
+        Math.max(
+
+            canvas?.clientHeight || 0,
+
+            root?.clientHeight || 0,
+
+            body?.clientHeight || 0,
+
+            window.innerHeight || 0
+
+        );
+
+
+    return {
+
+        width:
+            Math.round(
+                width
+            ),
+
+        height:
+            Math.round(
+                heightValue
+            )
+
+    };
+
+}
+
+
+// ==========================================================
+// WAIT FOR REAL IFRAME DIMENSIONS
+// ==========================================================
+
+async function waitForUsableViewport() {
+
+    const start =
+        performance.now();
+
+
+    while (
+
+        performance.now() -
+        start
+
+        <
+
+        VIEWPORT_WAIT_TIMEOUT
+
+    ) {
+
+        const size =
+            getViewportSize();
+
+
+        if (
+
+            size.width >=
+            MIN_VIEWPORT_SIZE
+
+            &&
+
+            size.height >=
+            MIN_VIEWPORT_SIZE
+
+        ) {
+
+            return size;
+
+        }
+
+
+        await delay(
+            50
+        );
+
+    }
+
+
+    const fallback =
+        getViewportSize();
+
+
+    if (
+
+        fallback.width <
+        1
+
+        ||
+
+        fallback.height <
+        1
+
+    ) {
+
+        throw new Error(
+            'PORPHYRA viewport never received usable dimensions.'
+        );
+
+    }
+
+
+    return fallback;
+
+}
 
 
 // ==========================================================
@@ -238,9 +769,8 @@ const scene =
     new THREE.Scene();
 
 
-// TRANSPARENT
-
-scene.background = null;
+scene.background =
+    null;
 
 
 // ==========================================================
@@ -252,8 +782,7 @@ const camera =
 
         32,
 
-        window.innerWidth /
-        window.innerHeight,
+        1,
 
         0.1,
 
@@ -263,113 +792,506 @@ const camera =
 
 
 // ==========================================================
+// CAMERA FIT
+// ==========================================================
+
+function fitCamera() {
+
+    const size =
+        getViewportSize();
+
+
+    if (
+
+        size.width <
+        1
+
+        ||
+
+        size.height <
+        1
+
+    ) {
+
+        return;
+
+    }
+
+
+    camera.aspect =
+
+        size.width /
+        size.height;
+
+
+    camera.updateProjectionMatrix();
+
+
+    const fov =
+
+        THREE.MathUtils.degToRad(
+            camera.fov
+        );
+
+
+    const paddedWidth =
+
+        RUG_WIDTH *
+        CAMERA_PADDING_X;
+
+
+    const paddedHeight =
+
+        RUG_HEIGHT *
+        CAMERA_PADDING_Y;
+
+
+    const distanceForHeight =
+
+        (
+            paddedHeight /
+            2
+        )
+
+        /
+
+        Math.tan(
+            fov /
+            2
+        );
+
+
+    const distanceForWidth =
+
+        (
+            paddedWidth /
+            2
+        )
+
+        /
+
+        (
+            Math.tan(
+                fov /
+                2
+            )
+
+            *
+
+            camera.aspect
+        );
+
+
+    const distance =
+
+        Math.max(
+
+            distanceForHeight,
+
+            distanceForWidth
+
+        );
+
+
+    camera.position.set(
+
+        0,
+
+        0,
+
+        distance *
+        1.02
+
+    );
+
+
+    camera.lookAt(
+        0,
+        0,
+        0
+    );
+
+}
+
+
+// ==========================================================
 // RENDERER
 // ==========================================================
 
-const renderer =
-    new THREE.WebGLRenderer({
+function createRenderer() {
 
-        antialias:
-            true,
+    if (
+        renderer
+    ) {
 
-        alpha:
-            true,
+        return renderer;
 
-        powerPreference:
-            'high-performance'
-
-    });
+    }
 
 
-renderer.domElement.id =
-    'rugCanvas';
+    /*
+        Reliability note:
+
+        "default" is intentional.
+
+        Forcing "high-performance" can cause the browser to
+        switch GPUs on some hybrid-GPU laptops.
+
+        The rug is lightweight enough that reliability is more
+        valuable than forcing that preference.
+    */
+
+    renderer =
+        new THREE.WebGLRenderer({
+
+            canvas:
+                canvas,
+
+            antialias:
+                true,
+
+            alpha:
+                true,
+
+            powerPreference:
+                'default',
+
+            premultipliedAlpha:
+                true
+
+        });
 
 
-renderer.setClearColor(
-    0x000000,
-    0
+    renderer.setClearColor(
+        0x000000,
+        0
+    );
+
+
+    renderer.outputColorSpace =
+        THREE.SRGBColorSpace;
+
+
+    renderer.toneMapping =
+        THREE.ACESFilmicToneMapping;
+
+
+    renderer.toneMappingExposure =
+        0.76;
+
+
+    renderer.shadowMap.enabled =
+        true;
+
+
+    renderer.shadowMap.type =
+        THREE.PCFSoftShadowMap;
+
+
+    renderer.shadowMap.autoUpdate =
+        true;
+
+
+    applyRendererSize(
+        true
+    );
+
+
+    return renderer;
+
+}
+
+
+// ==========================================================
+// RESIZE RENDERER
+// ==========================================================
+
+function applyRendererSize(
+    force = false
+) {
+
+    if (
+        !renderer
+    ) {
+
+        return false;
+
+    }
+
+
+    const size =
+        getViewportSize();
+
+
+    if (
+
+        size.width <
+        1
+
+        ||
+
+        size.height <
+        1
+
+    ) {
+
+        return false;
+
+    }
+
+
+    const desiredPixelRatio =
+
+        Math.min(
+
+            window.devicePixelRatio || 1,
+
+            2
+
+        );
+
+
+    if (
+
+        force
+
+        ||
+
+        renderer.getPixelRatio() !==
+        desiredPixelRatio
+
+    ) {
+
+        renderer.setPixelRatio(
+            desiredPixelRatio
+        );
+
+    }
+
+
+    const currentSize =
+        new THREE.Vector2();
+
+
+    renderer.getSize(
+        currentSize
+    );
+
+
+    if (
+
+        force
+
+        ||
+
+        currentSize.x !==
+        size.width
+
+        ||
+
+        currentSize.y !==
+        size.height
+
+    ) {
+
+        renderer.setSize(
+
+            size.width,
+
+            size.height,
+
+            false
+
+        );
+
+
+        fitCamera();
+
+
+        return true;
+
+    }
+
+
+    return false;
+
+}
+
+
+// ==========================================================
+// RESIZE OBSERVER
+// ==========================================================
+
+function scheduleResize() {
+
+    if (
+        resizeFrame !== null
+    ) {
+
+        return;
+
+    }
+
+
+    resizeFrame =
+        requestAnimationFrame(
+
+            () => {
+
+                resizeFrame =
+                    null;
+
+
+                const changed =
+                    applyRendererSize();
+
+
+                if (
+
+                    changed
+
+                    &&
+
+                    renderer
+
+                    &&
+
+                    rug
+
+                    &&
+
+                    !contextLost
+
+                ) {
+
+                    renderer.render(
+                        scene,
+                        camera
+                    );
+
+                }
+
+            }
+
+        );
+
+}
+
+
+const resizeObserver =
+    new ResizeObserver(
+        scheduleResize
+    );
+
+
+resizeObserver.observe(
+    document.documentElement
 );
 
 
-renderer.setPixelRatio(
-
-    Math.min(
-
-        window.devicePixelRatio,
-
-        2
-
-    )
-
+resizeObserver.observe(
+    document.body
 );
 
 
-renderer.setSize(
-
-    window.innerWidth,
-
-    window.innerHeight
-
+window.addEventListener(
+    'resize',
+    scheduleResize
 );
 
 
-renderer.outputColorSpace =
-    THREE.SRGBColorSpace;
+if (
+    window.visualViewport
+) {
 
+    window.visualViewport.addEventListener(
+        'resize',
+        scheduleResize
+    );
 
-renderer.toneMapping =
-    THREE.ACESFilmicToneMapping;
-
-
-renderer.toneMappingExposure =
-    0.76;
-
-
-renderer.shadowMap.enabled =
-    true;
-
-
-renderer.shadowMap.type =
-    THREE.PCFSoftShadowMap;
-
-
-renderer.shadowMap.autoUpdate =
-    true;
-
-
-document.body.appendChild(
-    renderer.domElement
-);
+}
 
 
 // ==========================================================
 // ENVIRONMENT
 // ==========================================================
 
-const pmrem =
-    new THREE.PMREMGenerator(
-        renderer
-    );
+async function rebuildEnvironment() {
+
+    if (
+        !renderer
+    ) {
+
+        return;
+
+    }
 
 
-const room =
-    new RoomEnvironment();
+    if (
+        environmentTarget
+    ) {
+
+        environmentTarget.dispose();
+
+        environmentTarget =
+            null;
+
+    }
 
 
-const environment =
-    pmrem.fromScene(
-        room,
-        0.04
-    );
+    try {
+
+        const pmrem =
+
+            new THREE.PMREMGenerator(
+                renderer
+            );
 
 
-scene.environment =
-    environment.texture;
+        const room =
+            new RoomEnvironment();
 
 
-room.dispose();
+        environmentTarget =
 
-pmrem.dispose();
+            pmrem.fromScene(
+                room,
+                0.04
+            );
+
+
+        scene.environment =
+            environmentTarget.texture;
+
+
+        room.dispose();
+
+        pmrem.dispose();
+
+    }
+    catch (
+        error
+    ) {
+
+        /*
+            The rug can still render from its direct lights.
+
+            Environment failure should never equal
+            "blank page."
+        */
+
+        console.warn(
+            'PORPHYRA environment fallback:',
+            error
+        );
+
+
+        scene.environment =
+            null;
+
+    }
+
+}
 
 
 // ==========================================================
@@ -573,7 +1495,7 @@ scene.add(
 
 
 // ----------------------------------------------------------
-// LOW GRAZING EDGE LIGHT
+// LOW EDGE GRAZE
 // ----------------------------------------------------------
 
 const edgeGraze =
@@ -610,7 +1532,7 @@ scene.add(
 
 
 // ----------------------------------------------------------
-// OPPOSITE EDGE SEPARATION
+// OPPOSITE EDGE FILL
 // ----------------------------------------------------------
 
 const edgeGrazeFill =
@@ -647,27 +1569,296 @@ scene.add(
 
 
 // ==========================================================
-// TEXTURES
+// TEXTURE LOADER
 // ==========================================================
 
 const textureLoader =
     new THREE.TextureLoader();
 
 
-async function loadTexture(
-    path
+// ==========================================================
+// APPEND QUERY PARAMETER
+// ==========================================================
+
+function appendQuery(
+    url,
+    key,
+    value
 ) {
 
-    return await textureLoader.loadAsync(
-        path
+    const separator =
+
+        url.includes('?')
+
+            ?
+
+            '&'
+
+            :
+
+            '?';
+
+
+    return (
+
+        url
+
+        +
+
+        separator
+
+        +
+
+        encodeURIComponent(
+            key
+        )
+
+        +
+
+        '='
+
+        +
+
+        encodeURIComponent(
+            value
+        )
+
     );
 
 }
 
 
+// ==========================================================
+// ONE TEXTURE ATTEMPT WITH TIMEOUT
+// ==========================================================
+
+function loadTextureAttempt(
+    url
+) {
+
+    return new Promise(
+
+        (
+            resolve,
+            reject
+        ) => {
+
+            let finished =
+                false;
+
+
+            const timer =
+
+                window.setTimeout(
+
+                    () => {
+
+                        if (
+                            finished
+                        ) {
+
+                            return;
+
+                        }
+
+
+                        finished =
+                            true;
+
+
+                        reject(
+
+                            new Error(
+                                `Texture timed out: ${url}`
+                            )
+
+                        );
+
+                    },
+
+                    TEXTURE_TIMEOUT
+
+                );
+
+
+            textureLoader.load(
+
+                url,
+
+
+                texture => {
+
+                    if (
+                        finished
+                    ) {
+
+                        texture.dispose();
+
+                        return;
+
+                    }
+
+
+                    finished =
+                        true;
+
+
+                    clearTimeout(
+                        timer
+                    );
+
+
+                    resolve(
+                        texture
+                    );
+
+                },
+
+
+                undefined,
+
+
+                error => {
+
+                    if (
+                        finished
+                    ) {
+
+                        return;
+
+                    }
+
+
+                    finished =
+                        true;
+
+
+                    clearTimeout(
+                        timer
+                    );
+
+
+                    reject(
+                        error
+                    );
+
+                }
+
+            );
+
+        }
+
+    );
+
+}
+
+
+// ==========================================================
+// TEXTURE RETRIES
+// ==========================================================
+
+async function loadTextureWithRetry(
+    path
+) {
+
+    let lastError =
+        null;
+
+
+    for (
+
+        let attempt = 0;
+
+        attempt <
+        TEXTURE_RETRIES;
+
+        attempt++
+
+    ) {
+
+        try {
+
+            const attemptUrl =
+
+                attempt === 0
+
+                    ?
+
+                    path
+
+                    :
+
+                    appendQuery(
+
+                        path,
+
+                        'retry',
+
+                        `${attempt}-${Date.now()}`
+
+                    );
+
+
+            return await loadTextureAttempt(
+                attemptUrl
+            );
+
+        }
+        catch (
+            error
+        ) {
+
+            lastError =
+                error;
+
+
+            console.warn(
+
+                `PORPHYRA texture attempt ${attempt + 1} failed:`,
+
+                path,
+
+                error
+
+            );
+
+
+            await delay(
+
+                250 *
+                (
+                    attempt +
+                    1
+                )
+
+            );
+
+        }
+
+    }
+
+
+    throw lastError;
+
+}
+
+
+// ==========================================================
+// TEXTURE CONFIGURATION
+// ==========================================================
+
 function configureTexture(
     texture
 ) {
+
+    if (
+        !texture
+    ) {
+
+        return;
+
+    }
+
 
     texture.wrapS =
         THREE.RepeatWrapping;
@@ -686,10 +1877,17 @@ function configureTexture(
     );
 
 
-    texture.anisotropy =
+    if (
+        renderer
+    ) {
 
-        renderer.capabilities
-            .getMaxAnisotropy();
+        texture.anisotropy =
+
+            renderer
+                .capabilities
+                .getMaxAnisotropy();
+
+    }
 
 
     texture.minFilter =
@@ -711,62 +1909,149 @@ function configureTexture(
 
 
 // ==========================================================
-// LOAD PRE-BAKED MATERIAL
+// LOAD MATERIAL MAPS
 // ==========================================================
 
 async function loadPorphyraMaterialMaps() {
 
-    const [
+    /*
+        Color is the most important texture.
 
-        colorTexture,
+        Material + normal textures are allowed to fail without
+        making the entire rug disappear.
+    */
 
-        materialTexture,
+    let colorTexture =
+        null;
 
-        normalTexture
 
-    ] =
-        await Promise.all([
+    let materialTexture =
+        null;
 
-            loadTexture(
+
+    let normalTexture =
+        null;
+
+
+    try {
+
+        colorTexture =
+
+            await loadTextureWithRetry(
                 COLOR_TEXTURE_PATH
-            ),
+            );
 
-            loadTexture(
+    }
+    catch (
+        error
+    ) {
+
+        console.error(
+            'PORPHYRA color texture unavailable. Using color fallback.',
+            error
+        );
+
+    }
+
+
+    const optionalResults =
+
+        await Promise.allSettled([
+
+            loadTextureWithRetry(
                 MATERIAL_TEXTURE_PATH
             ),
 
-            loadTexture(
+            loadTextureWithRetry(
                 NORMAL_TEXTURE_PATH
             )
 
         ]);
 
 
-    colorTexture.colorSpace =
-        THREE.SRGBColorSpace;
+    if (
+
+        optionalResults[0].status ===
+        'fulfilled'
+
+    ) {
+
+        materialTexture =
+            optionalResults[0].value;
+
+    }
+    else {
+
+        console.warn(
+            'PORPHYRA material map fallback active.'
+        );
+
+    }
 
 
-    configureTexture(
+    if (
+
+        optionalResults[1].status ===
+        'fulfilled'
+
+    ) {
+
+        normalTexture =
+            optionalResults[1].value;
+
+    }
+    else {
+
+        console.warn(
+            'PORPHYRA normal map fallback active.'
+        );
+
+    }
+
+
+    if (
         colorTexture
-    );
+    ) {
+
+        colorTexture.colorSpace =
+            THREE.SRGBColorSpace;
 
 
-    materialTexture.colorSpace =
-        THREE.NoColorSpace;
+        configureTexture(
+            colorTexture
+        );
+
+    }
 
 
-    configureTexture(
+    if (
         materialTexture
-    );
+    ) {
+
+        materialTexture.colorSpace =
+            THREE.NoColorSpace;
 
 
-    normalTexture.colorSpace =
-        THREE.NoColorSpace;
+        configureTexture(
+            materialTexture
+        );
+
+    }
 
 
-    configureTexture(
+    if (
         normalTexture
-    );
+    ) {
+
+        normalTexture.colorSpace =
+            THREE.NoColorSpace;
+
+
+        configureTexture(
+            normalTexture
+        );
+
+    }
 
 
     return {
@@ -783,139 +2068,8 @@ async function loadPorphyraMaterialMaps() {
 
 
 // ==========================================================
-// CLOTH STATE
+// EDGE HELPERS
 // ==========================================================
-
-let rug;
-
-let geometry;
-
-let positions;
-
-let vertexColors;
-
-let height;
-
-let velocity;
-
-let acceleration;
-
-let restX;
-
-let restY;
-
-let restZ;
-
-
-// ==========================================================
-// HELPERS
-// ==========================================================
-
-function indexOf(
-    x,
-    y
-) {
-
-    return (
-        y *
-        COLS +
-        x
-    );
-
-}
-
-
-function clamp01(
-    value
-) {
-
-    return Math.max(
-
-        0,
-
-        Math.min(
-            1,
-            value
-        )
-
-    );
-
-}
-
-
-function lerp(
-    a,
-    b,
-    t
-) {
-
-    return (
-
-        a +
-
-        (
-            b -
-            a
-        )
-
-        *
-
-        t
-
-    );
-
-}
-
-
-function smoothstep01(
-    t
-) {
-
-    t =
-        clamp01(
-            t
-        );
-
-
-    return (
-
-        t *
-        t *
-
-        (
-            3 -
-            2 * t
-        )
-
-    );
-
-}
-
-
-function gaussian(
-    value,
-    center,
-    sigma
-) {
-
-    const d =
-
-        (
-            value -
-            center
-        )
-
-        /
-
-        sigma;
-
-
-    return Math.exp(
-        -(d * d)
-    );
-
-}
-
 
 function edgeDistanceForPoint(
     x,
@@ -1012,7 +2166,10 @@ function edgeProfileHeight(
 
     return (
 
-        ridge -
+        ridge
+
+        -
+
         outerLip
 
     );
@@ -1093,10 +2250,6 @@ function edgeIrregularity(
         0;
 
 
-    // ------------------------------------------------------
-    // LEFT / RIGHT
-    // ------------------------------------------------------
-
     if (
         dx <
         dy
@@ -1109,14 +2262,7 @@ function edgeIrregularity(
         const wave =
 
             Math.sin(
-
-                along *
-                2.85
-
-                +
-
-                0.6
-
+                along * 2.85 + 0.6
             )
 
             *
@@ -1126,14 +2272,7 @@ function edgeIrregularity(
             +
 
             Math.sin(
-
-                along *
-                6.9
-
-                +
-
-                1.7
-
+                along * 6.9 + 1.7
             )
 
             *
@@ -1143,14 +2282,7 @@ function edgeIrregularity(
             +
 
             Math.sin(
-
-                along *
-                12.3
-
-                +
-
-                0.2
-
+                along * 12.3 + 0.2
             )
 
             *
@@ -1177,12 +2309,6 @@ function edgeIrregularity(
             fade;
 
     }
-
-
-    // ------------------------------------------------------
-    // TOP / BOTTOM
-    // ------------------------------------------------------
-
     else {
 
         const along =
@@ -1192,14 +2318,7 @@ function edgeIrregularity(
         const wave =
 
             Math.sin(
-
-                along *
-                2.35
-
-                +
-
-                1.2
-
+                along * 2.35 + 1.2
             )
 
             *
@@ -1209,14 +2328,7 @@ function edgeIrregularity(
             +
 
             Math.sin(
-
-                along *
-                5.8
-
-                +
-
-                0.3
-
+                along * 5.8 + 0.3
             )
 
             *
@@ -1226,14 +2338,7 @@ function edgeIrregularity(
             +
 
             Math.sin(
-
-                along *
-                10.7
-
-                +
-
-                2.1
-
+                along * 10.7 + 2.1
             )
 
             *
@@ -1276,7 +2381,7 @@ function edgeIrregularity(
 
 
 // ==========================================================
-// RESTING CLOTH SHAPE
+// RESTING HEIGHT
 // ==========================================================
 
 function restingHeight(
@@ -1343,9 +2448,17 @@ function restingHeight(
 
     return (
 
-        wave1 +
-        wave2 +
-        wave3 +
+        wave1
+
+        +
+
+        wave2
+
+        +
+
+        wave3
+
+        +
 
         edgeProfileHeight(
             x,
@@ -1416,9 +2529,14 @@ function initializeClothPhysics() {
 
 
     for (
+
         let i = 0;
-        i < count;
+
+        i <
+        count;
+
         i++
+
     ) {
 
         const x =
@@ -1578,10 +2696,34 @@ function onPointerMove(
     event
 ) {
 
-    const rect =
+    if (
+        !renderer
+    ) {
 
-        renderer.domElement
-            .getBoundingClientRect();
+        return;
+
+    }
+
+
+    const rect =
+        canvas.getBoundingClientRect();
+
+
+    if (
+
+        rect.width <=
+        0
+
+        ||
+
+        rect.height <=
+        0
+
+    ) {
+
+        return;
+
+    }
 
 
     pointerNDC.x =
@@ -1760,20 +2902,30 @@ function onPointerLeave() {
 }
 
 
-renderer.domElement.addEventListener(
+canvas.addEventListener(
 
     'pointermove',
 
-    onPointerMove
+    onPointerMove,
+
+    {
+        passive:
+            true
+    }
 
 );
 
 
-renderer.domElement.addEventListener(
+canvas.addEventListener(
 
     'pointerleave',
 
-    onPointerLeave
+    onPointerLeave,
+
+    {
+        passive:
+            true
+    }
 
 );
 
@@ -1806,10 +2958,7 @@ function updateSmoothPointer(
         -
 
         Math.exp(
-
-            -10 *
-            dt
-
+            -10 * dt
         );
 
 
@@ -1832,20 +2981,14 @@ function updateSmoothPointer(
         smoothPointerSpeed *=
 
             Math.exp(
-
-                -10 *
-                dt
-
+                -10 * dt
             );
 
 
         visualSpeed01 *=
 
             Math.exp(
-
-                -7 *
-                dt
-
+                -7 * dt
             );
 
 
@@ -1906,27 +3049,25 @@ function updateSmoothPointer(
 
     const instantaneousVX =
 
-        dx /
+        dx
+
+        /
 
         Math.max(
-
             dt,
-
             0.0001
-
         );
 
 
     const instantaneousVY =
 
-        dy /
+        dy
+
+        /
 
         Math.max(
-
             dt,
-
             0.0001
-
         );
 
 
@@ -2196,15 +3337,12 @@ function simulateCloth(
         60;
 
 
-    // ------------------------------------------------------
-    // SPRINGS
-    // ------------------------------------------------------
-
     for (
 
         let y = 1;
 
-        y < ROWS - 1;
+        y <
+        ROWS - 1;
 
         y++
 
@@ -2214,7 +3352,8 @@ function simulateCloth(
 
             let x = 1;
 
-            x < COLS - 1;
+            x <
+            COLS - 1;
 
             x++
 
@@ -2258,9 +3397,18 @@ function simulateCloth(
             const neighborAverage =
 
                 (
-                    height[left] +
-                    height[right] +
-                    height[down] +
+                    height[left]
+
+                    +
+
+                    height[right]
+
+                    +
+
+                    height[down]
+
+                    +
+
                     height[up]
                 )
 
@@ -2283,7 +3431,10 @@ function simulateCloth(
 
             acceleration[i] +=
 
-                -height[i] *
+                -height[i]
+
+                *
+
                 RESTORE_FORCE;
 
         }
@@ -2291,13 +3442,12 @@ function simulateCloth(
     }
 
 
-    // ------------------------------------------------------
-    // POINTER FORCE
-    // ------------------------------------------------------
-
     if (
 
-        pointerActive &&
+        pointerActive
+
+        &&
+
         hasSmoothPointer
 
     ) {
@@ -2316,7 +3466,8 @@ function simulateCloth(
 
             let y = 1;
 
-            y < ROWS - 1;
+            y <
+            ROWS - 1;
 
             y++
 
@@ -2326,7 +3477,8 @@ function simulateCloth(
 
                 let x = 1;
 
-                x < COLS - 1;
+                x <
+                COLS - 1;
 
                 x++
 
@@ -2387,7 +3539,6 @@ function simulateCloth(
 
 
                     influence =
-
                         smoothstep01(
                             influence
                         );
@@ -2413,8 +3564,14 @@ function simulateCloth(
 
                     acceleration[i] -=
 
-                        velocity[i] *
-                        effect.localDamping *
+                        velocity[i]
+
+                        *
+
+                        effect.localDamping
+
+                        *
+
                         influence;
 
                 }
@@ -2426,15 +3583,14 @@ function simulateCloth(
     }
 
 
-    // ------------------------------------------------------
-    // INTEGRATE
-    // ------------------------------------------------------
-
     const frameDamping =
 
         Math.pow(
+
             DAMPING,
+
             step
+
         );
 
 
@@ -2442,7 +3598,8 @@ function simulateCloth(
 
         let y = 1;
 
-        y < ROWS - 1;
+        y <
+        ROWS - 1;
 
         y++
 
@@ -2452,7 +3609,8 @@ function simulateCloth(
 
             let x = 1;
 
-            x < COLS - 1;
+            x <
+            COLS - 1;
 
             x++
 
@@ -2485,14 +3643,15 @@ function simulateCloth(
     }
 
 
-    // ------------------------------------------------------
-    // PIN PERIMETER
-    // ------------------------------------------------------
-
     for (
+
         let x = 0;
-        x < COLS;
+
+        x <
+        COLS;
+
         x++
+
     ) {
 
         const bottom =
@@ -2528,9 +3687,14 @@ function simulateCloth(
 
 
     for (
+
         let y = 0;
-        y < ROWS;
+
+        y <
+        ROWS;
+
         y++
+
     ) {
 
         const left =
@@ -2575,8 +3739,14 @@ function updateDynamicOcclusion() {
 
     if (
 
-        !positions ||
-        !vertexColors ||
+        !positions
+
+        ||
+
+        !vertexColors
+
+        ||
+
         !restZ
 
     ) {
@@ -2605,15 +3775,25 @@ function updateDynamicOcclusion() {
 
 
     for (
+
         let y = 0;
-        y < ROWS;
+
+        y <
+        ROWS;
+
         y++
+
     ) {
 
         for (
+
             let x = 0;
-            x < COLS;
+
+            x <
+            COLS;
+
             x++
+
         ) {
 
             const i =
@@ -2634,10 +3814,21 @@ function updateDynamicOcclusion() {
 
             if (
 
-                x > 0 &&
-                x < COLS - 1 &&
-                y > 0 &&
-                y < ROWS - 1
+                x > 0
+
+                &&
+
+                x <
+                COLS - 1
+
+                &&
+
+                y > 0
+
+                &&
+
+                y <
+                ROWS - 1
 
             ) {
 
@@ -2727,9 +3918,18 @@ function updateDynamicOcclusion() {
                 const neighborAverage =
 
                     (
-                        leftDisp +
-                        rightDisp +
-                        downDisp +
+                        leftDisp
+
+                        +
+
+                        rightDisp
+
+                        +
+
+                        downDisp
+
+                        +
+
                         upDisp
                     )
 
@@ -3097,7 +4297,7 @@ function installIntegratedBorder(
 
     material.customProgramCacheKey =
         () =>
-            'porphyra-v14-2-wix-direct';
+            'porphyra-v14-3-reliable';
 
 }
 
@@ -3183,9 +4383,14 @@ function updateGeometry() {
 
 
     for (
+
         let i = 0;
-        i < positions.count;
+
+        i <
+        positions.count;
+
         i++
+
     ) {
 
         const baseX =
@@ -3198,11 +4403,8 @@ function updateGeometry() {
 
         const irregular =
             edgeIrregularity(
-
                 baseX,
-
                 baseY
-
             );
 
 
@@ -3267,11 +4469,8 @@ function updateGeometry() {
         const edgeFade =
 
             Math.min(
-
                 edgeFadeX,
-
                 edgeFadeY
-
             );
 
 
@@ -3417,9 +4616,18 @@ function updateGeometry() {
 
             foldZ =
 
-                combinedFold *
-                foldAmplitude *
-                envelope *
+                combinedFold
+
+                *
+
+                foldAmplitude
+
+                *
+
+                envelope
+
+                *
+
                 edgeFade;
 
 
@@ -3431,15 +4639,27 @@ function updateGeometry() {
 
             finalX +=
 
-                motionDirX *
-                dragAmount *
+                motionDirX
+
+                *
+
+                dragAmount
+
+                *
+
                 dragEnvelope;
 
 
             finalY +=
 
-                motionDirY *
-                dragAmount *
+                motionDirY
+
+                *
+
+                dragAmount
+
+                *
+
                 dragEnvelope;
 
 
@@ -3522,10 +4742,12 @@ function updateGeometry() {
 async function createRug() {
 
     const maps =
+
         await loadPorphyraMaterialMaps();
 
 
     geometry =
+
         new THREE.PlaneGeometry(
 
             RUG_WIDTH,
@@ -3539,11 +4761,8 @@ async function createRug() {
         );
 
 
-    // ------------------------------------------------------
-    // VERTEX COLORS
-    // ------------------------------------------------------
-
     const colorArray =
+
         new Float32Array(
 
             geometry
@@ -3564,6 +4783,7 @@ async function createRug() {
 
 
     vertexColors =
+
         new THREE.BufferAttribute(
 
             colorArray,
@@ -3587,95 +4807,134 @@ async function createRug() {
     );
 
 
-    // ------------------------------------------------------
-    // SILK MATERIAL
-    // ------------------------------------------------------
+    const materialSettings = {
+
+        /*
+            If the color map somehow fails entirely,
+            the rug still appears as imperial purple
+            rather than disappearing.
+        */
+
+        color:
+
+            maps.colorTexture
+
+                ?
+
+                0xffffff
+
+                :
+
+                0x321440,
+
+
+        map:
+            maps.colorTexture,
+
+
+        metalness:
+
+            maps.materialTexture
+
+                ?
+
+                1.0
+
+                :
+
+                0.04,
+
+
+        metalnessMap:
+            maps.materialTexture,
+
+
+        roughness:
+
+            maps.materialTexture
+
+                ?
+
+                1.0
+
+                :
+
+                0.56,
+
+
+        roughnessMap:
+            maps.materialTexture,
+
+
+        normalMap:
+            maps.normalTexture,
+
+
+        normalScale:
+
+            new THREE.Vector2(
+                0.8,
+                -0.8
+            ),
+
+
+        anisotropy:
+            SILK_ANISOTROPY,
+
+
+        anisotropyRotation:
+            SILK_ANISOTROPY_ROTATION,
+
+
+        sheen:
+            SILK_SHEEN,
+
+
+        sheenColor:
+
+            new THREE.Color(
+                0xd3ae78
+            ),
+
+
+        sheenRoughness:
+            SILK_SHEEN_ROUGHNESS,
+
+
+        specularIntensity:
+            0.58,
+
+
+        specularColor:
+
+            new THREE.Color(
+                0xffead2
+            ),
+
+
+        clearcoat:
+            0,
+
+
+        envMapIntensity:
+            ENVIRONMENT_INTENSITY,
+
+
+        vertexColors:
+            true,
+
+
+        side:
+            THREE.DoubleSide
+
+    };
+
 
     const material =
-        new THREE.MeshPhysicalMaterial({
 
-            map:
-                maps.colorTexture,
-
-
-            metalness:
-                1.0,
-
-
-            metalnessMap:
-                maps.materialTexture,
-
-
-            roughness:
-                1.0,
-
-
-            roughnessMap:
-                maps.materialTexture,
-
-
-            normalMap:
-                maps.normalTexture,
-
-
-            normalScale:
-                new THREE.Vector2(
-
-                    0.8,
-
-                    -0.8
-
-                ),
-
-
-            anisotropy:
-                SILK_ANISOTROPY,
-
-
-            anisotropyRotation:
-                SILK_ANISOTROPY_ROTATION,
-
-
-            sheen:
-                SILK_SHEEN,
-
-
-            sheenColor:
-                new THREE.Color(
-                    0xd3ae78
-                ),
-
-
-            sheenRoughness:
-                SILK_SHEEN_ROUGHNESS,
-
-
-            specularIntensity:
-                0.58,
-
-
-            specularColor:
-                new THREE.Color(
-                    0xffead2
-                ),
-
-
-            clearcoat:
-                0,
-
-
-            envMapIntensity:
-                ENVIRONMENT_INTENSITY,
-
-
-            vertexColors:
-                true,
-
-
-            side:
-                THREE.DoubleSide
-
-        });
+        new THREE.MeshPhysicalMaterial(
+            materialSettings
+        );
 
 
     material.shadowSide =
@@ -3688,6 +4947,7 @@ async function createRug() {
 
 
     rug =
+
         new THREE.Mesh(
 
             geometry,
@@ -3717,10 +4977,6 @@ async function createRug() {
     initializeClothPhysics();
 
 
-    // ------------------------------------------------------
-    // DEBUG ACCESS
-    // ------------------------------------------------------
-
     window.rug =
         rug;
 
@@ -3729,18 +4985,8 @@ async function createRug() {
         material;
 
 
-    window.porphyraMaps = {
-
-        colorTexture:
-            maps.colorTexture,
-
-        materialTexture:
-            maps.materialTexture,
-
-        normalTexture:
-            maps.normalTexture
-
-    };
+    window.porphyraMaps =
+        maps;
 
 
     window.porphyraLights = {
@@ -3759,153 +5005,295 @@ async function createRug() {
 
     };
 
-
-    console.log(
-        'PORPHYRA Cloth v14.2 — WIX DIRECT BUILD LOADED'
-    );
-
 }
 
 
 // ==========================================================
-// CAMERA FIT
+// SHADER PRECOMPILE
 // ==========================================================
 
-function fitCamera() {
+async function precompileScene() {
 
-    camera.aspect =
+    if (
+        !renderer
+    ) {
 
-        window.innerWidth /
-        window.innerHeight;
-
-
-    camera.updateProjectionMatrix();
-
-
-    const fov =
-
-        THREE.MathUtils.degToRad(
-            camera.fov
-        );
-
-
-    const paddedWidth =
-
-        RUG_WIDTH *
-        CAMERA_PADDING_X;
-
-
-    const paddedHeight =
-
-        RUG_HEIGHT *
-        CAMERA_PADDING_Y;
-
-
-    const distanceForHeight =
-
-        (
-            paddedHeight /
-            2
-        )
-
-        /
-
-        Math.tan(
-            fov /
-            2
-        );
-
-
-    const distanceForWidth =
-
-        (
-            paddedWidth /
-            2
-        )
-
-        /
-
-        (
-            Math.tan(
-                fov /
-                2
-            )
-
-            *
-
-            camera.aspect
-        );
-
-
-    const distance =
-
-        Math.max(
-
-            distanceForHeight,
-
-            distanceForWidth
-
-        );
-
-
-    camera.position.set(
-
-        0,
-
-        0,
-
-        distance *
-        1.02
-
-    );
-
-
-    camera.lookAt(
-        0,
-        0,
-        0
-    );
-
-}
-
-
-// ==========================================================
-// RESIZE
-// ==========================================================
-
-window.addEventListener(
-
-    'resize',
-
-    () => {
-
-        renderer.setPixelRatio(
-
-            Math.min(
-
-                window.devicePixelRatio,
-
-                2
-
-            )
-
-        );
-
-
-        renderer.setSize(
-
-            window.innerWidth,
-
-            window.innerHeight
-
-        );
-
-
-        fitCamera();
+        return;
 
     }
 
-);
+
+    try {
+
+        if (
+            typeof renderer.compileAsync ===
+            'function'
+        ) {
+
+            /*
+                Never allow shader pre-compilation itself to
+                block the application indefinitely.
+            */
+
+            await Promise.race([
+
+                renderer.compileAsync(
+                    scene,
+                    camera
+                ),
+
+                delay(
+                    3000
+                )
+
+            ]);
+
+        }
+        else {
+
+            renderer.compile(
+                scene,
+                camera
+            );
+
+        }
+
+    }
+    catch (
+        error
+    ) {
+
+        console.warn(
+            'PORPHYRA shader precompile fallback:',
+            error
+        );
+
+    }
+
+}
+
+
+// ==========================================================
+// VERIFY FIRST FRAME
+// ==========================================================
+
+function renderVerifiedFrame() {
+
+    if (
+
+        !renderer
+
+        ||
+
+        !rug
+
+        ||
+
+        contextLost
+
+    ) {
+
+        return false;
+
+    }
+
+
+    applyRendererSize(
+        true
+    );
+
+
+    renderer.render(
+        scene,
+        camera
+    );
+
+
+    const gl =
+        renderer.getContext();
+
+
+    const size =
+        getViewportSize();
+
+
+    const valid =
+
+        size.width >=
+        MIN_VIEWPORT_SIZE
+
+        &&
+
+        size.height >=
+        MIN_VIEWPORT_SIZE
+
+        &&
+
+        !gl.isContextLost()
+
+        &&
+
+        renderer.info.render.calls >
+        0
+
+        &&
+
+        canvas.width >
+        0
+
+        &&
+
+        canvas.height >
+        0;
+
+
+    return valid;
+
+}
+
+
+// ==========================================================
+// FIRST FRAME RETRIES
+// ==========================================================
+
+async function establishFirstFrame() {
+
+    for (
+
+        let attempt = 0;
+
+        attempt <
+        FIRST_FRAME_ATTEMPTS;
+
+        attempt++
+
+    ) {
+
+        const success =
+            renderVerifiedFrame();
+
+
+        if (
+            success
+        ) {
+
+            firstFrameSuccessful =
+                true;
+
+
+            sessionStorage.removeItem(
+                'porphyraRecovery143'
+            );
+
+
+            console.log(
+                `PORPHYRA v${BUILD_VERSION} first frame verified.`
+            );
+
+
+            return true;
+
+        }
+
+
+        console.warn(
+            `PORPHYRA first-frame attempt ${attempt + 1} failed.`
+        );
+
+
+        await delay(
+            250
+        );
+
+    }
+
+
+    return false;
+
+}
+
+
+// ==========================================================
+// RECOVERY RELOAD
+// ==========================================================
+
+function recoveryReload(
+    reason
+) {
+
+    console.error(
+        'PORPHYRA recovery reload:',
+        reason
+    );
+
+
+    const key =
+        'porphyraRecovery143';
+
+
+    const currentCount =
+
+        Number(
+
+            sessionStorage.getItem(
+                key
+            )
+
+            ||
+
+            0
+
+        );
+
+
+    if (
+
+        currentCount >=
+        MAX_RECOVERY_RELOADS
+
+    ) {
+
+        console.error(
+            'PORPHYRA reached maximum automatic recovery attempts.'
+        );
+
+
+        return;
+
+    }
+
+
+    sessionStorage.setItem(
+
+        key,
+
+        String(
+            currentCount + 1
+        )
+
+    );
+
+
+    const url =
+        new URL(
+            window.location.href
+        );
+
+
+    url.searchParams.set(
+
+        '_porphyraRecovery',
+
+        `${Date.now()}-${currentCount + 1}`
+
+    );
+
+
+    window.location.replace(
+        url.toString()
+    );
+
+}
 
 
 // ==========================================================
@@ -3916,92 +5304,552 @@ const clock =
     new THREE.Clock();
 
 
+function animationFrame() {
+
+    if (
+
+        !renderer
+
+        ||
+
+        !rug
+
+        ||
+
+        contextLost
+
+    ) {
+
+        return;
+
+    }
+
+
+    const frameTime =
+
+        Math.min(
+
+            clock.getDelta(),
+
+            0.05
+
+        );
+
+
+    physicsAccumulator +=
+        frameTime;
+
+
+    let substeps =
+        0;
+
+
+    while (
+
+        physicsAccumulator >=
+        FIXED_TIMESTEP
+
+        &&
+
+        substeps <
+        MAX_SUBSTEPS
+
+    ) {
+
+        simulateCloth(
+            FIXED_TIMESTEP
+        );
+
+
+        physicsAccumulator -=
+            FIXED_TIMESTEP;
+
+
+        substeps++;
+
+    }
+
+
+    if (
+
+        substeps ===
+        MAX_SUBSTEPS
+
+    ) {
+
+        physicsAccumulator =
+            0;
+
+    }
+
+
+    updateGeometry();
+
+
+    renderer.render(
+        scene,
+        camera
+    );
+
+}
+
+
+// ==========================================================
+// START / STOP ANIMATION
+// ==========================================================
+
 function startAnimation() {
+
+    if (
+
+        !renderer
+
+        ||
+
+        animationRunning
+
+        ||
+
+        contextLost
+
+    ) {
+
+        return;
+
+    }
+
+
+    animationRunning =
+        true;
+
 
     clock.start();
 
 
     renderer.setAnimationLoop(
+        animationFrame
+    );
 
-        () => {
-
-            const frameTime =
-
-                Math.min(
-
-                    clock.getDelta(),
-
-                    0.05
-
-                );
+}
 
 
-            physicsAccumulator +=
-                frameTime;
+function stopAnimation() {
+
+    if (
+        !renderer
+    ) {
+
+        return;
+
+    }
 
 
-            let substeps =
-                0;
+    animationRunning =
+        false;
 
 
-            while (
-
-                physicsAccumulator >=
-                FIXED_TIMESTEP
-
-                &&
-
-                substeps <
-                MAX_SUBSTEPS
-
-            ) {
-
-                simulateCloth(
-                    FIXED_TIMESTEP
-                );
+    renderer.setAnimationLoop(
+        null
+    );
 
 
-                physicsAccumulator -=
-                    FIXED_TIMESTEP;
+    clock.stop();
+
+}
 
 
-                substeps++;
+// ==========================================================
+// WEBGL CONTEXT LOSS
+// ==========================================================
 
-            }
+canvas.addEventListener(
+
+    'webglcontextlost',
+
+    event => {
+
+        event.preventDefault();
+
+
+        contextLost =
+            true;
+
+
+        stopAnimation();
+
+
+        console.warn(
+            'PORPHYRA WebGL context lost. Waiting for restoration.'
+        );
+
+
+        clearTimeout(
+            contextRestoreTimer
+        );
+
+
+        contextRestoreTimer =
+
+            window.setTimeout(
+
+                () => {
+
+                    if (
+                        contextLost
+                    ) {
+
+                        recoveryReload(
+                            'WebGL context did not restore.'
+                        );
+
+                    }
+
+                },
+
+                CONTEXT_RESTORE_TIMEOUT
+
+            );
+
+    },
+
+    false
+
+);
+
+
+// ==========================================================
+// WEBGL CONTEXT RESTORED
+// ==========================================================
+
+canvas.addEventListener(
+
+    'webglcontextrestored',
+
+    async () => {
+
+        console.log(
+            'PORPHYRA WebGL context restored.'
+        );
+
+
+        clearTimeout(
+            contextRestoreTimer
+        );
+
+
+        contextLost =
+            false;
+
+
+        try {
+
+            applyRendererSize(
+                true
+            );
+
+
+            await rebuildEnvironment();
+
+
+            await precompileScene();
+
+
+            const success =
+                await establishFirstFrame();
 
 
             if (
-
-                substeps ===
-                MAX_SUBSTEPS
-
+                !success
             ) {
 
-                physicsAccumulator =
-                    0;
+                recoveryReload(
+                    'Context restored but rendering did not recover.'
+                );
+
+
+                return;
 
             }
 
 
-            if (
-                rug
-            ) {
+            startAnimation();
 
-                updateGeometry();
+        }
+        catch (
+            error
+        ) {
 
-            }
+            console.error(
+                error
+            );
 
 
-            renderer.render(
-
-                scene,
-
-                camera
-
+            recoveryReload(
+                'Context restore threw an exception.'
             );
 
         }
 
+    },
+
+    false
+
+);
+
+
+// ==========================================================
+// VISIBILITY
+// ==========================================================
+
+document.addEventListener(
+
+    'visibilitychange',
+
+    () => {
+
+        if (
+            document.hidden
+        ) {
+
+            stopAnimation();
+
+        }
+        else if (
+
+            firstFrameSuccessful
+
+            &&
+
+            !contextLost
+
+        ) {
+
+            applyRendererSize(
+                true
+            );
+
+
+            renderer.render(
+                scene,
+                camera
+            );
+
+
+            startAnimation();
+
+        }
+
+    }
+
+);
+
+
+// ==========================================================
+// BACK/FORWARD CACHE / WIX NAVIGATION
+// ==========================================================
+
+window.addEventListener(
+
+    'pageshow',
+
+    async event => {
+
+        if (
+            !event.persisted
+        ) {
+
+            return;
+
+        }
+
+
+        console.log(
+            'PORPHYRA restored from page cache.'
+        );
+
+
+        await waitForUsableViewport();
+
+
+        applyRendererSize(
+            true
+        );
+
+
+        if (
+
+            renderer
+
+            &&
+
+            rug
+
+            &&
+
+            !contextLost
+
+        ) {
+
+            renderer.render(
+                scene,
+                camera
+            );
+
+
+            startAnimation();
+
+        }
+
+    }
+
+);
+
+
+window.addEventListener(
+
+    'pagehide',
+
+    () => {
+
+        stopAnimation();
+
+    }
+
+);
+
+
+// ==========================================================
+// CLEANUP
+// ==========================================================
+
+window.addEventListener(
+
+    'unload',
+
+    () => {
+
+        stopAnimation();
+
+
+        resizeObserver.disconnect();
+
+
+        if (
+            environmentTarget
+        ) {
+
+            environmentTarget.dispose();
+
+        }
+
+
+        if (
+            geometry
+        ) {
+
+            geometry.dispose();
+
+        }
+
+
+        if (
+
+            rug
+
+            &&
+
+            rug.material
+
+        ) {
+
+            rug.material.dispose();
+
+        }
+
+
+        if (
+            renderer
+        ) {
+
+            renderer.dispose();
+
+        }
+
+    }
+
+);
+
+
+// ==========================================================
+// BOOT
+// ==========================================================
+
+async function boot() {
+
+    console.log(
+        `PORPHYRA Cloth v${BUILD_VERSION} booting...`
+    );
+
+
+    /*
+        IMPORTANT:
+
+        Do not initialize WebGL while Wix is still reporting a
+        zero or tiny iframe.
+    */
+
+    await waitForUsableViewport();
+
+
+    createRenderer();
+
+
+    fitCamera();
+
+
+    await rebuildEnvironment();
+
+
+    await createRug();
+
+
+    /*
+        Make absolutely sure Wix has not changed dimensions
+        while textures were downloading.
+    */
+
+    await waitForUsableViewport();
+
+
+    applyRendererSize(
+        true
+    );
+
+
+    await precompileScene();
+
+
+    const successfulFrame =
+
+        await establishFirstFrame();
+
+
+    if (
+        !successfulFrame
+    ) {
+
+        throw new Error(
+            'PORPHYRA could not establish a verified first frame.'
+        );
+
+    }
+
+
+    startAnimation();
+
+
+    console.log(
+        `PORPHYRA Cloth v${BUILD_VERSION} ready.`
     );
 
 }
@@ -4013,35 +5861,7 @@ function startAnimation() {
 
 try {
 
-    fitCamera();
-
-
-    await createRug();
-
-
-    // ------------------------------------------------------
-    // DIRECT FIRST FRAME
-    //
-    // No preview.
-    // No opacity handoff.
-    // No DOM state transition.
-    // ------------------------------------------------------
-
-    renderer.render(
-
-        scene,
-
-        camera
-
-    );
-
-
-    startAnimation();
-
-
-    console.log(
-        'PORPHYRA Cloth v14.2 ready'
-    );
+    await boot();
 
 }
 catch (
@@ -4049,11 +5869,14 @@ catch (
 ) {
 
     console.error(
-
-        'PORPHYRA failed to initialize:',
-
+        'PORPHYRA startup failure:',
         error
+    );
 
+
+    recoveryReload(
+        error?.message ||
+        'Unknown startup failure.'
     );
 
 }
